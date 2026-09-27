@@ -39,3 +39,5 @@ appsettings.Production.json
 ## Operating System files
 .DS_Store
 Thumbs.db
+
+*.suo [Dd]ebug/ [Rr]elease/ x64/ x86/ .idea/
