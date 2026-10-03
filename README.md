@@ -59,3 +59,7 @@ npm start
 ## Estructura del proyecto
 
 Backend en ASP.NET Core Web API, frontend en React, persistencia con Entity Framework Core sobre SQL Server.
+
+## Notas del proyecto
+
+Proyecto académico desarrollado para Programación III.
