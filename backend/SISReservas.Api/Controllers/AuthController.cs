@@ -1,6 +1,8 @@
 ﻿using Microsoft.AspNetCore.Mvc;
 using SISReservas.Api.DTOs.Auth;
 using SISReservas.Api.Services;
+using System.Security.Claims;
+using Microsoft.AspNetCore.Authorization;
 
 namespace SISReservas.Api.Controllers;
 
@@ -9,11 +11,14 @@ namespace SISReservas.Api.Controllers;
 public class AuthController : ControllerBase
 {
     private readonly AuthService _authService;
+    private readonly SessionService _sessionService;
 
     public AuthController(
-        AuthService authService)
+    AuthService authService,
+    SessionService sessionService)
     {
         _authService = authService;
+        _sessionService = sessionService;
     }
 
     [HttpPost("register")]
@@ -83,5 +88,59 @@ public class AuthController : ControllerBase
                 Message = "Si la cuenta puede recibir una activación, se ha enviado un nuevo enlace."
             });
         }
+    }
+    [HttpPost("login")]
+    public async Task<IActionResult> Login(
+    LoginRequest request)
+    {
+        var response = await _authService.LoginAsync(
+            request.Email,
+            request.Password);
+
+        if (response.Message == "Credenciales inválidas.")
+        {
+            return Unauthorized(response);
+        }
+
+        return Ok(response);
+    }
+
+    [Authorize]
+    [HttpGet("me")]
+    public IActionResult Me()
+    {
+        return Ok(new
+        {
+            id = User.FindFirstValue(ClaimTypes.NameIdentifier),
+            nombre = User.FindFirstValue(ClaimTypes.Name),
+            email = User.FindFirstValue(ClaimTypes.Email),
+            rol = User.FindFirstValue(ClaimTypes.Role)
+        });
+    }
+
+    [Authorize]
+    [HttpPost("logout")]
+    public async Task<IActionResult> Logout()
+    {
+        if (!Request.Headers.TryGetValue("Authorization", out var authorization))
+        {
+            return Unauthorized();
+        }
+
+        var value = authorization.ToString();
+
+        if (!value.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase))
+        {
+            return Unauthorized();
+        }
+
+        var token = value["Bearer ".Length..].Trim();
+
+        await _sessionService.RevokeAsync(token);
+
+        return Ok(new
+        {
+            message = "Sesión cerrada correctamente."
+        });
     }
 }

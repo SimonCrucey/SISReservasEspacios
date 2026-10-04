@@ -13,6 +13,7 @@ public class SISReservasDbContext : DbContext
     public DbSet<Usuario> Usuarios => Set<Usuario>();
     public DbSet<TokenAcceso> TokensAcceso => Set<TokenAcceso>();
     public DbSet<CorreoEnCola> CorreosEnCola => Set<CorreoEnCola>();
+    public DbSet<Sesion> Sesiones => Set<Sesion>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -87,6 +88,23 @@ public class SISReservasDbContext : DbContext
             entity.HasOne(c => c.Usuario)
                 .WithMany(u => u.Correos)
                 .HasForeignKey(c => c.UsuarioId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<Sesion>(entity =>
+        {
+            entity.HasKey(s => s.Id);
+
+            entity.Property(s => s.TokenHash)
+                .HasMaxLength(128)
+                .IsRequired();
+
+            entity.HasIndex(s => s.TokenHash)
+                .IsUnique();
+
+            entity.HasOne(s => s.Usuario)
+                .WithMany(u => u.Sesiones)
+                .HasForeignKey(s => s.UsuarioId)
                 .OnDelete(DeleteBehavior.Cascade);
         });
     }

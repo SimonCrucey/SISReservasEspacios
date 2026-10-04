@@ -3,6 +3,7 @@ using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using SISReservas.Api.Data;
 
@@ -11,9 +12,11 @@ using SISReservas.Api.Data;
 namespace SISReservas.Api.Migrations
 {
     [DbContext(typeof(SISReservasDbContext))]
-    partial class SISReservasDbContextModelSnapshot : ModelSnapshot
+    [Migration("20261004152153_AddSessions")]
+    partial class AddSessions
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
