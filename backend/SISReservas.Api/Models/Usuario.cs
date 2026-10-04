@@ -22,9 +22,8 @@ public class Usuario
 
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 
-    public ICollection<TokenAcceso> TokensAcceso { get; set; } =
-        new List<TokenAcceso>();
+    public ICollection<TokenAcceso> TokensAcceso { get; set; } = new List<TokenAcceso>();
 
-    public ICollection<CorreoEnCola> Correos { get; set; } =
-        new List<CorreoEnCola>();
+    public ICollection<CorreoEnCola> Correos { get; set; } = new List<CorreoEnCola>();
+    public ICollection<Sesion> Sesiones { get; set; } = new List<Sesion>();
 }

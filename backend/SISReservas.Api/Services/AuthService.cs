@@ -5,7 +5,9 @@ using SISReservas.Api.Models;
 using SISReservas.Api.Models.Enums;
 using SISReservas.Api.Security;
 
+
 namespace SISReservas.Api.Services;
+
 
 public class AuthService
 {
@@ -13,17 +15,24 @@ public class AuthService
     private readonly PasswordService _passwordService;
     private readonly TokenService _tokenService;
     private readonly EmailQueueService _emailQueue;
+    private readonly IConfiguration _configuration;
+    private readonly SessionService _sessionService;
+
 
     public AuthService(
         SISReservasDbContext db,
         PasswordService passwordService,
         TokenService tokenService,
-        EmailQueueService emailQueue)
+        EmailQueueService emailQueue,
+        IConfiguration configuration,
+        SessionService sessionService)
     {
         _db = db;
         _passwordService = passwordService;
         _tokenService = tokenService;
         _emailQueue = emailQueue;
+        _configuration = configuration;
+        _sessionService = sessionService;
     }
 
     public async Task<AuthResponse> RegisterAsync(
@@ -201,5 +210,80 @@ public class AuthService
     private static string NormalizeEmail(string email)
     {
         return email.Trim().ToLowerInvariant();
+    }
+
+    public async Task<AuthResponse> LoginAsync(
+    string email,
+    string password)
+    {
+        email = email.Trim().ToLowerInvariant();
+
+        var usuario = await _db.Usuarios
+            .FirstOrDefaultAsync(u => u.Email == email);
+
+        const string genericMessage =
+            "Credenciales inválidas.";
+
+        if (usuario == null)
+        {
+            return new AuthResponse
+            {
+                Message = genericMessage
+            };
+        }
+
+        if (usuario.BloqueadoHasta.HasValue &&
+            usuario.BloqueadoHasta.Value > DateTime.UtcNow)
+        {
+            return new AuthResponse
+            {
+                Message = "La cuenta está temporalmente bloqueada."
+            };
+        }
+
+        if (!usuario.Activo)
+        {
+            return new AuthResponse
+            {
+                Message = "La cuenta no está activa."
+            };
+        }
+
+        var passwordCorrecta =
+            _passwordService.VerifyPassword(
+                usuario,
+                usuario.PasswordHash,
+                password);
+
+        if (!passwordCorrecta)
+        {
+            usuario.IntentosFallidos++;
+
+            if (usuario.IntentosFallidos >= 5)
+            {
+                usuario.BloqueadoHasta =
+                    DateTime.UtcNow.AddMinutes(15);
+            }
+
+            await _db.SaveChangesAsync();
+
+            return new AuthResponse
+            {
+                Message = genericMessage
+            };
+        }
+
+        usuario.IntentosFallidos = 0;
+        usuario.BloqueadoHasta = null;
+
+        var session = await _sessionService.CreateAsync(usuario);
+
+        await _db.SaveChangesAsync();
+
+        return new AuthResponse
+        {
+            Message = "Inicio de sesión exitoso.",
+            SessionToken = session.RawToken
+        };
     }
 }
