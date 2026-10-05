@@ -14,6 +14,7 @@ public class SISReservasDbContext : DbContext
     public DbSet<TokenAcceso> TokensAcceso => Set<TokenAcceso>();
     public DbSet<CorreoEnCola> CorreosEnCola => Set<CorreoEnCola>();
     public DbSet<Sesion> Sesiones => Set<Sesion>();
+    public DbSet<Reserva> Reservas => Set<Reserva>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
