@@ -45,6 +45,8 @@ builder.Services.AddScoped<EmailQueueService>();
 builder.Services.AddScoped<AuthService>();
 builder.Services.AddScoped<SessionService>();
 builder.Services.AddScoped<UserAdministrationService>();
+builder.Services.AddScoped<PasswordRecoveryService>();
+builder.Services.AddScoped<PasswordPolicyService>();
 
 var app = builder.Build();
 
