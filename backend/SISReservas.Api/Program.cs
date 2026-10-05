@@ -44,6 +44,7 @@ builder.Services.AddScoped<TokenService>();
 builder.Services.AddScoped<EmailQueueService>();
 builder.Services.AddScoped<AuthService>();
 builder.Services.AddScoped<SessionService>();
+builder.Services.AddScoped<UserAdministrationService>();
 
 var app = builder.Build();
 
