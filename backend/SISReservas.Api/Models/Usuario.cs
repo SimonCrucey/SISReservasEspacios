@@ -26,4 +26,7 @@ public class Usuario
 
     public ICollection<CorreoEnCola> Correos { get; set; } = new List<CorreoEnCola>();
     public ICollection<Sesion> Sesiones { get; set; } = new List<Sesion>();
+    public ICollection<SolicitudPermiso> SolicitudesPermiso { get; set; } = new List<SolicitudPermiso>();
+    public ICollection<SolicitudPermiso> SolicitudesResueltas { get; set; } = new List<SolicitudPermiso>();
+    public ICollection<UsuarioPermiso> Permisos { get; set; } = new List<UsuarioPermiso>();
 }

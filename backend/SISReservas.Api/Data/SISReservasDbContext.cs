@@ -14,7 +14,8 @@ public class SISReservasDbContext : DbContext
     public DbSet<TokenAcceso> TokensAcceso => Set<TokenAcceso>();
     public DbSet<CorreoEnCola> CorreosEnCola => Set<CorreoEnCola>();
     public DbSet<Sesion> Sesiones => Set<Sesion>();
-    public DbSet<Reserva> Reservas => Set<Reserva>();
+    public DbSet<SolicitudPermiso> SolicitudesPermiso => Set<SolicitudPermiso>();
+    public DbSet<UsuarioPermiso> PermisosUsuario => Set<UsuarioPermiso>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -107,6 +108,59 @@ public class SISReservasDbContext : DbContext
                 .WithMany(u => u.Sesiones)
                 .HasForeignKey(s => s.UsuarioId)
                 .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<SolicitudPermiso>(entity =>
+        {
+            entity.HasKey(s => s.Id);
+
+            entity.Property(s => s.Permiso)
+                .HasConversion<string>()
+                .HasMaxLength(40)
+                .IsRequired();
+
+            entity.Property(s => s.Estado)
+                .HasConversion<string>()
+                .HasMaxLength(30)
+                .IsRequired();
+
+            entity.Property(s => s.MotivoRechazo)
+                .HasMaxLength(500);
+
+            entity.Property(s => s.RowVersion)
+                .IsRowVersion();
+
+            entity.HasOne(s => s.Solicitante)
+                .WithMany(u => u.SolicitudesPermiso)
+                .HasForeignKey(s => s.SolicitanteId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(s => s.ResueltaPor)
+                .WithMany(u => u.SolicitudesResueltas)
+                .HasForeignKey(s => s.ResueltaPorId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasIndex(s => s.Estado);
+
+            entity.HasIndex(s => s.SolicitanteId);
+        });
+
+        modelBuilder.Entity<UsuarioPermiso>(entity =>
+        {
+            entity.HasKey(p => p.Id);
+
+            entity.Property(p => p.Permiso)
+                .HasConversion<string>()
+                .HasMaxLength(40)
+                .IsRequired();
+
+            entity.HasOne(p => p.Usuario)
+                .WithMany(u => u.Permisos)
+                .HasForeignKey(p => p.UsuarioId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasIndex(p => new { p.UsuarioId, p.Permiso })
+                .IsUnique();
         });
     }
 }

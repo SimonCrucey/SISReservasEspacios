@@ -1,3 +1,6 @@
 <Solution>
+  <Folder Name="/tests/">
+    <Project Path="tests/SISReservas.Api.Tests/SISReservas.Api.Tests.csproj" />
+  </Folder>
   <Project Path="backend/SISReservas.Api/SISReservas.Api.csproj" />
 </Solution>

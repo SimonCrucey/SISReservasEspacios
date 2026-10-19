@@ -33,6 +33,18 @@ public class UserAdministrationService
             .ToListAsync();
     }
 
+    public async Task<List<UserSummaryDto>> GetUserSummariesAsync()
+    {
+        return await _context.Usuarios
+            .AsNoTracking()
+            .Select(u => new UserSummaryDto
+            {
+                Id = u.Id,
+                Nombre = u.Nombre
+            })
+            .ToListAsync();
+    }
+
     public async Task<bool> ChangeRoleAsync(Guid userId, Rol rol)
     {
         var usuario = await _context.Usuarios.FindAsync(userId);

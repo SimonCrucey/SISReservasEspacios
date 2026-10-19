@@ -93,6 +93,58 @@ namespace SISReservas.Api.Migrations
                     b.ToTable("Sesiones");
                 });
 
+            modelBuilder.Entity("SISReservas.Api.Models.SolicitudPermiso", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTime?>("AplicadaEn")
+                        .HasColumnType("datetime2");
+
+                    b.Property<DateTime>("CreadaEn")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("Estado")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("nvarchar(30)");
+
+                    b.Property<string>("MotivoRechazo")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<string>("Permiso")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("nvarchar(40)");
+
+                    b.Property<DateTime?>("ResueltaEn")
+                        .HasColumnType("datetime2");
+
+                    b.Property<Guid?>("ResueltaPorId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<byte[]>("RowVersion")
+                        .IsConcurrencyToken()
+                        .IsRequired()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("rowversion");
+
+                    b.Property<Guid>("SolicitanteId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Estado");
+
+                    b.HasIndex("ResueltaPorId");
+
+                    b.HasIndex("SolicitanteId");
+
+                    b.ToTable("SolicitudesPermiso");
+                });
+
             modelBuilder.Entity("SISReservas.Api.Models.TokenAcceso", b =>
                 {
                     b.Property<Guid>("Id")
@@ -176,6 +228,31 @@ namespace SISReservas.Api.Migrations
                     b.ToTable("Usuarios");
                 });
 
+            modelBuilder.Entity("SISReservas.Api.Models.UsuarioPermiso", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTime>("OtorgadoEn")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("Permiso")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("nvarchar(40)");
+
+                    b.Property<Guid>("UsuarioId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("UsuarioId", "Permiso")
+                        .IsUnique();
+
+                    b.ToTable("PermisosUsuario");
+                });
+
             modelBuilder.Entity("SISReservas.Api.Models.CorreoEnCola", b =>
                 {
                     b.HasOne("SISReservas.Api.Models.Usuario", "Usuario")
@@ -198,6 +275,24 @@ namespace SISReservas.Api.Migrations
                     b.Navigation("Usuario");
                 });
 
+            modelBuilder.Entity("SISReservas.Api.Models.SolicitudPermiso", b =>
+                {
+                    b.HasOne("SISReservas.Api.Models.Usuario", "ResueltaPor")
+                        .WithMany("SolicitudesResueltas")
+                        .HasForeignKey("ResueltaPorId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("SISReservas.Api.Models.Usuario", "Solicitante")
+                        .WithMany("SolicitudesPermiso")
+                        .HasForeignKey("SolicitanteId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("ResueltaPor");
+
+                    b.Navigation("Solicitante");
+                });
+
             modelBuilder.Entity("SISReservas.Api.Models.TokenAcceso", b =>
                 {
                     b.HasOne("SISReservas.Api.Models.Usuario", "Usuario")
@@ -209,11 +304,28 @@ namespace SISReservas.Api.Migrations
                     b.Navigation("Usuario");
                 });
 
+            modelBuilder.Entity("SISReservas.Api.Models.UsuarioPermiso", b =>
+                {
+                    b.HasOne("SISReservas.Api.Models.Usuario", "Usuario")
+                        .WithMany("Permisos")
+                        .HasForeignKey("UsuarioId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Usuario");
+                });
+
             modelBuilder.Entity("SISReservas.Api.Models.Usuario", b =>
                 {
                     b.Navigation("Correos");
 
+                    b.Navigation("Permisos");
+
                     b.Navigation("Sesiones");
+
+                    b.Navigation("SolicitudesPermiso");
+
+                    b.Navigation("SolicitudesResueltas");
 
                     b.Navigation("TokensAcceso");
                 });

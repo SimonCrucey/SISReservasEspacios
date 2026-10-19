@@ -6,25 +6,49 @@ using SISReservas.Api.Services;
 
 [ApiController]
 [Route("api/users")]
-[Authorize(Roles = nameof(Rol.Administrador))]
 public class UsersController : ControllerBase
 {
     private readonly UserAdministrationService _userAdministrationService;
+    private readonly PermisoService _permisoService;
 
     public UsersController(
-        UserAdministrationService userAdministrationService)
+        UserAdministrationService userAdministrationService,
+        PermisoService permisoService)
     {
         _userAdministrationService = userAdministrationService;
+        _permisoService = permisoService;
     }
 
+    [Authorize]
     [HttpGet]
-    public async Task<ActionResult<List<UserResponseDto>>> GetUsers()
+    public async Task<IActionResult> GetUsers()
     {
-        var users = await _userAdministrationService.GetUsersAsync();
+        var currentUserId = GetCurrentUserId();
 
-        return Ok(users);
+        if (currentUserId is null)
+            return Unauthorized();
+
+        if (!await _permisoService.TienePermisoAsync(
+                currentUserId.Value,
+                Permiso.ConsultarUsuarios))
+        {
+            return Forbid();
+        }
+
+        if (User.IsInRole(nameof(Rol.Administrador)))
+        {
+            var users = await _userAdministrationService.GetUsersAsync();
+
+            return Ok(users);
+        }
+
+        var summaries = await _userAdministrationService
+            .GetUserSummariesAsync();
+
+        return Ok(summaries);
     }
 
+    [Authorize(Roles = nameof(Rol.Administrador))]
     [HttpPut("{id:guid}/role")]
     public async Task<IActionResult> ChangeRole(
         Guid id,
@@ -45,6 +69,7 @@ public class UsersController : ControllerBase
         return NoContent();
     }
 
+    [Authorize(Roles = nameof(Rol.Administrador))]
     [HttpPost("{id:guid}/deactivate")]
     public async Task<IActionResult> Deactivate(Guid id)
     {
@@ -61,6 +86,7 @@ public class UsersController : ControllerBase
         return NoContent();
     }
 
+    [Authorize(Roles = nameof(Rol.Administrador))]
     [HttpPost("{id:guid}/activate")]
     public async Task<IActionResult> Activate(Guid id)
     {

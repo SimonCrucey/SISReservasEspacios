@@ -47,6 +47,8 @@ builder.Services.AddScoped<SessionService>();
 builder.Services.AddScoped<UserAdministrationService>();
 builder.Services.AddScoped<PasswordRecoveryService>();
 builder.Services.AddScoped<PasswordPolicyService>();
+builder.Services.AddScoped<PermisoService>();
+builder.Services.AddScoped<SolicitudPermisoService>();
 
 var app = builder.Build();
 
