@@ -33,7 +33,7 @@ Implementar la gestión de permisos de usuarios dentro de SISReservasEspacios, i
 | RF-GP-05 | La aprobación concede automáticamente el permiso efectivo. |
 | RF-GP-06 | Las transiciones prohibidas se rechazan y no alteran el estado persistido. |
 | RF-GP-07 | Un usuario no puede aprobar ni rechazar su propia solicitud. |
-| RD-09 | La persistencia usa SQL Server; la demostración mediante reinicio real queda pendiente. |
+| RD-09 | La persistencia usa SQL Server; fue demostrada mediante un reinicio real de la API el 20 de octubre de 2026. |
 
 La implementación se encuentra en `SolicitudPermisoService`, `PermisoService`, `PermissionRequestsController`, `TransicionesSolicitudPermiso` y los modelos `SolicitudPermiso` y `UsuarioPermiso`.
 
@@ -63,6 +63,7 @@ Se solicitó al agente de IA apoyo para:
   - `AprobarAsync_SolicitudRechazada_NoCambiaEstado`
   - `AprobarAsync_MismaSolicitudDosVeces_NoDuplicaPermiso`
 - Se documentaron las rutas HTTP, roles, flujo de aprobación/rechazo y limitaciones.
+- Se demostró RD-09 con una base LocalDB aislada, dos solicitudes y un reinicio real de la API.
 - Se mantuvo la lógica de producción sin cambios durante la etapa de documentación.
 
 ---
@@ -137,6 +138,24 @@ Passed! - Failed: 0, Passed: 52, Skipped: 0, Total: 52
 
 Las pruebas utilizan `Microsoft.EntityFrameworkCore.InMemory` mediante `TestDatabase`. No levantan la aplicación completa, no usan HTTP y no modifican LocalDB.
 
+### 5.5 Demostración de RD-09
+
+La persistencia se comprobó con una base LocalDB aislada y desechable, sin usar la base principal del proyecto:
+
+1. Se creó `SISReservasEspacios_RD09_20261020_Audit`.
+2. Se aplicaron las migraciones con `dotnet ef migrations script --idempotent` y `sqlcmd`, sin ejecutar `dotnet ef database update`.
+3. Se registraron tres usuarios de prueba mediante `POST /api/auth/register` y se activaron o promovieron con SQL únicamente en la base desechable.
+4. Se crearon dos solicitudes con `POST /api/permission-requests`: una para aprobar y otra para rechazar.
+5. El Administrador aprobó una solicitud y rechazó la otra con el motivo `Prueba RD-09`.
+6. Se detuvo la API y se inició de nuevo sobre la misma base, en el puerto `5088`.
+7. Después del reinicio:
+   - `GET /api/permission-requests/mine` devolvió la solicitud aprobada en estado `Aplicada` y la rechazada en estado `Rechazada`.
+   - El motivo de rechazo persistió.
+   - `GET /api/users` respondió `200` para el usuario con `ConsultarUsuarios`.
+   - `GET /api/permission-requests/pending` devolvió `0`.
+   - La tabla `PermisosUsuario` conservó la concesión efectiva.
+8. La base de prueba se eliminó al finalizar. La base `SISReservasEspacios` no se modificó.
+
 ---
 
 ## 6. Migración aplicada y verificaciones
@@ -156,11 +175,11 @@ En una etapa anterior se aplicó sobre `(localdb)\MSSQLLocalDB`, base `SISReserv
 - La clave foránea de `ResueltaPorId` usa `DeleteBehavior.Restrict`.
 - La base contenía 4 usuarios, 16 sesiones, 0 permisos y 0 solicitudes al momento de la verificación.
 
-La migración no se reaplicó durante la etapa de documentación.
+La migración no se reaplicó durante la etapa de documentación. Para RD-09 se aplicó un script idempotente sobre la base desechable `SISReservasEspacios_RD09_20261020_Audit`; esa base se eliminó después de la prueba y la base principal no se modificó.
 
 ---
 
-## 7. Comprobaciones HTTP de solo lectura
+## 7. Comprobaciones HTTP y demostración de persistencia
 
 En una etapa anterior se inició la API en el perfil HTTP, puerto `5054`, y se realizaron únicamente comprobaciones de solo lectura:
 
@@ -171,7 +190,21 @@ En una etapa anterior se inició la API en el perfil HTTP, puerto `5054`, y se r
   - `GET /api/permission-requests/pending` respondió **401**.
   - `GET /api/users` respondió **401**.
 
-Estas comprobaciones confirman que Swagger está disponible en Development y que las rutas protegidas rechazan solicitudes sin autenticación. **No equivalen a una prueba HTTP completa**: no se probaron flujos autenticados, creación, aprobación, rechazo ni persistencia tras reinicio.
+Estas comprobaciones confirman que Swagger está disponible en Development y que las rutas protegidas rechazan solicitudes sin autenticación.
+
+### 7.1 Demostración RD-09
+
+La prueba de persistencia se ejecutó el 20 de octubre de 2026 con la API en `http://127.0.0.1:5088` y la base desechable `SISReservasEspacios_RD09_20261020_Audit`:
+
+- Antes de la aprobación, el usuario Estándar recibió `403` en `GET /api/users`.
+- Se crearon dos solicitudes con `POST /api/permission-requests`; ambas quedaron en estado `Pendiente`.
+- El Administrador aprobó una solicitud y rechazó la otra con el motivo `Prueba RD-09`.
+- La aprobación produjo el estado `Aplicada` y una concesión en `PermisosUsuario`; el rechazo produjo el estado `Rechazada`.
+- Se detuvo la API y se inició de nuevo sobre la misma base.
+- Después del reinicio, `GET /api/permission-requests/mine` devolvió la solicitud aprobada en estado `Aplicada` y la rechazada en estado `Rechazada` con su motivo.
+- `GET /api/users` respondió `200` para el usuario con `ConsultarUsuarios`.
+- `GET /api/permission-requests/pending` devolvió `0`.
+- La base de prueba se eliminó al finalizar; la base principal `SISReservasEspacios` no se modificó.
 
 ---
 
@@ -190,13 +223,12 @@ Estas comprobaciones confirman que Swagger está disponible en Development y que
 
 ## 9. Limitaciones y comprobaciones pendientes
 
-- **RD-09 pendiente:** no se ha demostrado mediante un reinicio real de la API que una solicitud creada, aprobada o rechazada siga disponible después de reiniciar el proceso.
-- No se han ejecutado flujos HTTP autenticados completos por falta de credenciales de prueba seguras.
-- No se han probado por HTTP la creación, aprobación, rechazo ni la consulta posterior de solicitudes.
+- **RD-09 demostrado:** una solicitud aprobada y otra rechazada siguieron disponibles después de reiniciar la API, junto con la concesión efectiva del permiso.
+- Se ejecutaron por HTTP la creación, aprobación, rechazo, consulta de solicitudes propias y consulta de usuarios con permiso. No se cubrió la matriz completa de errores y transiciones.
 - No hay una prueba de concurrencia real contra SQL Server; la prueba de fallo de persistencia usa un interceptor y la suite usa InMemory.
-- No se han creado credenciales ni cuentas de prueba.
-- El cierre de la asignación se registra con el commit y el tag `asignacion-2`; la demostración de RD-09 sigue pendiente.
-- La documentación de las rutas y del flujo está en el `README.md`; la demostración manual de RD-09 debe completarse en una etapa posterior autorizada.
+- Las cuentas de prueba se crearon únicamente en la base desechable y se eliminaron con ella; no se versionaron credenciales.
+- La base principal `SISReservasEspacios` no se modificó durante la demostración de RD-09.
+- El cierre de la asignación se registra con el commit y el tag `asignacion-2`; la demostración de RD-09 se documenta en el `README.md` y en esta bitácora.
 
 ---
 

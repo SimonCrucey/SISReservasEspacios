@@ -156,7 +156,7 @@ Desde la raíz del repositorio:
 dotnet test SISReservasEspacios.slnx
 ```
 
-Resultado de la última ejecución: **52 aprobadas, 0 fallidas, 0 omitidas**.
+Resultado de la última ejecución: **52 aprobadas, 0 fallidas, 0 omitidas** sobre los archivos versionados de la asignación.
 
 Las pruebas usan EF Core InMemory y no inician la API ni modifican LocalDB. La suite incluye, entre otras, las pruebas de transiciones prohibidas:
 
@@ -172,13 +172,29 @@ Comprobado anteriormente:
 * Sin autenticación, `GET /api/permission-requests/mine`, `GET /api/permission-requests/pending` y `GET /api/users` respondieron `401`.
 * La migración `20261019220956_AgregarGestionPermisos` fue aplicada y sus tablas fueron verificadas en LocalDB.
 
+### Demostración de RD-09
+
+El 20 de octubre de 2026 se demostró RD-09 con una base LocalDB aislada y desechable:
+
+1. Se creó la base `SISReservasEspacios_RD09_20261020_Audit`.
+2. Se aplicaron las migraciones con un script idempotente de `dotnet ef` y `sqlcmd`, sin ejecutar `dotnet ef database update` sobre la base principal.
+3. Se registraron tres usuarios de prueba y se activaron o promovieron únicamente en la base desechable.
+4. Se crearon dos solicitudes: una fue aprobada y la otra rechazada.
+5. Se detuvo la API y se inició de nuevo sobre la misma base.
+6. Tras el reinicio se comprobó que:
+   * La solicitud aprobada seguía en estado `Aplicada` y el permiso `ConsultarUsuarios` seguía concedido.
+   * La solicitud rechazada seguía en estado `Rechazada` con su motivo.
+   * `GET /api/permission-requests/mine` devolvió ambas solicitudes.
+   * `GET /api/users` respondió `200` para el usuario con el permiso concedido.
+   * `GET /api/permission-requests/pending` devolvió `0`.
+7. La base de prueba se eliminó al finalizar. La base `SISReservasEspacios` no se modificó.
+
 Pendiente:
 
-* Demostrar RD-09 mediante un reinicio real de la API y una consulta posterior.
-* Probar por HTTP los flujos autenticados de creación, aprobación, rechazo y consulta.
+* Probar la matriz HTTP completa de errores y transiciones.
 * Probar concurrencia real contra SQL Server.
 
-Las comprobaciones HTTP anteriores fueron de solo lectura y no equivalen a una prueba HTTP completa.
+Las comprobaciones HTTP de solo lectura no equivalen por sí solas a una prueba HTTP completa; la demostración de RD-09 sí incluyó escrituras, reinicio y consulta posterior en una base aislada.
 
 ## Cómo probar los criterios de aceptación de la Práctica 1
 
