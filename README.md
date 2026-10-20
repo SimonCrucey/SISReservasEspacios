@@ -148,6 +148,160 @@ Respuestas de error esperadas:
 6. Un usuario no puede aprobar ni rechazar su propia solicitud.
 7. Una solicitud ya resuelta no puede aprobarse ni rechazarse nuevamente.
 
+### Prueba manual de RF-GP-01 a RF-GP-07
+
+#### Preparación local
+
+Para un clon limpio se necesitan tres cuentas activas: un Administrador y dos usuarios Estándar. Regístralas con `POST /api/auth/register` usando `nombre`, `email` y `password`, y actívalas. Si estás trabajando en LocalDB y no vas a usar el enlace de activación, puedes preparar el entorno local así:
+
+```sql
+UPDATE Usuarios
+SET Activo = 1
+WHERE Email IN ('admin@ejemplo.com', 'estandar.a@ejemplo.com', 'estandar.b@ejemplo.com');
+
+UPDATE Usuarios
+SET Rol = 'Administrador'
+WHERE Email = 'admin@ejemplo.com';
+```
+
+Inicia sesión con cada cuenta y guarda el `sessionToken` devuelto:
+
+```bash
+BASE=http://localhost:5054
+TOKEN_ADMIN="<sessionToken de admin>"
+TOKEN_A="<sessionToken de estandar.a>"
+TOKEN_B="<sessionToken de estandar.b>"
+```
+
+Comprueba el rol con `GET /api/auth/me`. Los enums se envían como enteros: `{"rol":1}` es Administrador y `{"rol":2}` es Estándar. Los estados son `Pendiente=1`, `Aprobada=2`, `Rechazada=3` y `Aplicada=4`.
+
+#### RF-GP-01: la solicitud nace en `Pendiente`
+
+**Rol:** Estándar A.
+
+```bash
+curl -i -X POST "$BASE/api/permission-requests" \
+  -H "Authorization: Bearer $TOKEN_A" \
+  -H "Content-Type: application/json" \
+  -d '{"permiso":3}'
+```
+
+**Esperado:** `201 Created`, con `estado: 1`, `permiso: 3`, `resueltaPorId: null` y `motivoRechazo: null`. Guarda el `id` como `SOLICITUD_A`. `GET /api/permission-requests/mine` con `TOKEN_A` debe devolver la misma solicitud en estado `Pendiente`.
+
+#### RF-GP-02: visibilidad de solicitudes pendientes
+
+**Roles:** Administrador, Estándar A y Estándar B.
+
+1. Con `TOKEN_B`, crea otra solicitud con el mismo `POST` y `{"permiso":3}`. Guarda su `id` como `SOLICITUD_B`.
+2. Con `TOKEN_ADMIN`, ejecuta `GET /api/permission-requests/pending`: debe responder `200` e incluir `SOLICITUD_A` y `SOLICITUD_B`.
+3. Con `TOKEN_A`, ejecuta `GET /api/permission-requests/mine`: debe incluir solo `SOLICITUD_A`, no `SOLICITUD_B`.
+4. Con `TOKEN_B`, `GET /api/permission-requests/mine` debe incluir solo `SOLICITUD_B`.
+5. Con `TOKEN_A`, ejecuta `GET /api/permission-requests/pending`: debe responder `403` porque el rol Estándar no puede consultar la bandeja administrativa.
+
+#### RF-GP-03: aprobación con resolutor y fecha
+
+**Rol:** Administrador.
+
+```bash
+curl -i -X POST "$BASE/api/permission-requests/$SOLICITUD_A/approve" \
+  -H "Authorization: Bearer $TOKEN_ADMIN"
+```
+
+**Esperado:** `200 OK`, con `estado: 4`, `resueltaPorId` igual al `id` del Administrador, `resueltaPorNombre` con su nombre, y `resueltaEn` y `aplicadaEn` con fecha. `Aprobada=2` es un estado intermedio en memoria; el estado persistido final es `Aplicada`. `GET /api/permission-requests/mine` con `TOKEN_A` debe mostrar los mismos datos.
+
+#### RF-GP-04: rechazo con motivo obligatorio
+
+**Rol:** Administrador.
+
+1. Intenta rechazar `SOLICITUD_B` sin motivo:
+
+```bash
+curl -i -X POST "$BASE/api/permission-requests/$SOLICITUD_B/reject" \
+  -H "Authorization: Bearer $TOKEN_ADMIN" \
+  -H "Content-Type: application/json" \
+  -d '{"motivoRechazo":""}'
+```
+
+**Esperado:** `400 Bad Request`. Después, `GET /api/permission-requests/mine` con `TOKEN_B` debe seguir mostrando `estado: 1`, `resueltaPorId: null` y `motivoRechazo: null`.
+
+2. Rechaza la misma solicitud con un motivo válido:
+
+```bash
+curl -i -X POST "$BASE/api/permission-requests/$SOLICITUD_B/reject" \
+  -H "Authorization: Bearer $TOKEN_ADMIN" \
+  -H "Content-Type: application/json" \
+  -d '{"motivoRechazo":"No cumple los requisitos"}'
+```
+
+**Esperado:** `200 OK`, con `estado: 3`, `motivoRechazo` igual al texto enviado, `resueltaPorId` y `resueltaEn` informados.
+
+#### RF-GP-05: el permiso se aplica tras la aprobación
+
+**Rol:** Estándar A.
+
+Antes de aprobar `SOLICITUD_A`, `GET /api/users` con `TOKEN_A` debe responder `403`. Después de ejecutar RF-GP-03, el mismo `GET /api/users` debe responder `200` y devolver la lista resumida de usuarios (`id` y `nombre`). No se requiere insertar nada manualmente en `PermisosUsuario`: la aprobación crea la concesión efectiva.
+
+#### RF-GP-06: doble aprobación y transición prohibida
+
+**Rol:** Administrador.
+
+1. Repite la aprobación de `SOLICITUD_A`, que ya está `Aplicada`. Debe responder `409` con el mensaje `Solo se pueden aprobar solicitudes Pendientes.`
+2. Intenta rechazar `SOLICITUD_A`. Debe responder `409` con el mensaje `Solo se pueden rechazar solicitudes Pendientes.`
+3. `GET /api/permission-requests/mine` con `TOKEN_A` debe seguir mostrando `estado: 4`, con los mismos `resueltaPorId`, `resueltaEn` y `aplicadaEn`.
+4. Opcionalmente, comprueba que no se duplicó la concesión:
+
+```sql
+SELECT COUNT(*)
+FROM PermisosUsuario
+WHERE UsuarioId = '<id de estandar.a>' AND Permiso = 'ConsultarUsuarios';
+```
+
+El resultado debe ser `1`.
+
+#### RF-GP-07: un Administrador no resuelve su propia solicitud
+
+**Roles:** Administrador original y Estándar A.
+
+La API no permite que un Administrador cree una solicitud: `POST /api/permission-requests` está restringido a `Estandar`. Para probar la resolución propia por HTTP, crea la solicitud como Estándar y después promueve temporalmente a ese usuario:
+
+1. Con `TOKEN_A`, crea `SOLICITUD_A2` con `{"permiso":3}`.
+2. Con `TOKEN_ADMIN`, ejecuta `GET /api/users` y obtén el `id` de Estándar A. Guárdalo como `ID_A`.
+3. Con `TOKEN_ADMIN`, promueve a A:
+
+```bash
+curl -i -X PUT "$BASE/api/users/$ID_A/role" \
+  -H "Authorization: Bearer $TOKEN_ADMIN" \
+  -H "Content-Type: application/json" \
+  -d '{"rol":1}'
+```
+
+**Esperado:** `204 No Content`. El cambio de rol revoca las sesiones de A.
+
+4. Inicia sesión de nuevo como A y guarda el nuevo token como `TOKEN_A_ADMIN`. `GET /api/auth/me` debe mostrar el rol `Administrador`.
+5. Con `TOKEN_A_ADMIN`, intenta aprobar su propia solicitud:
+
+```bash
+curl -i -X POST "$BASE/api/permission-requests/$SOLICITUD_A2/approve" \
+  -H "Authorization: Bearer $TOKEN_A_ADMIN"
+```
+
+**Esperado:** `403 Forbidden` con el mensaje `No puedes aprobar tu propia solicitud.`
+
+6. Opcionalmente, repite con `reject` y un motivo válido; debe responder `403` con `No puedes rechazar tu propia solicitud.`
+7. Comprueba que `SOLICITUD_A2` sigue pendiente con `GET /api/permission-requests/pending` usando `TOKEN_ADMIN`, o con `GET /api/permission-requests/mine` usando `TOKEN_A_ADMIN`.
+8. Restaura el rol de A con el Administrador original:
+
+```bash
+curl -i -X PUT "$BASE/api/users/$ID_A/role" \
+  -H "Authorization: Bearer $TOKEN_ADMIN" \
+  -H "Content-Type: application/json" \
+  -d '{"rol":2}'
+```
+
+**Esperado:** `204 No Content`. No uses la misma cuenta para promover y degradar a A, porque un Administrador no puede quitarse su propio rol.
+
+La suite automatizada también cubre este requisito con `AprobarAsync_ResolucionPropia_NoModificaSolicitud` y `RechazarAsync_ResolucionPropia_NoModificaSolicitud`.
+
 ## Pruebas
 
 Desde la raíz del repositorio:
