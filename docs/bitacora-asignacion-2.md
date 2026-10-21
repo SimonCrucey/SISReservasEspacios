@@ -41,7 +41,7 @@ La implementación se encuentra en `SolicitudPermisoService`, `PermisoService`, 
 
 ## 3. Trabajo delegado a la IA
 
-No se conserva una transcripción literal completa de todos los prompts y respuestas dentro del repositorio. El siguiente resumen se basa en las tareas que realmente se ejecutaron durante el desarrollo y la auditoría.
+No se conserva una transcripción literal completa de todos los prompts y respuestas dentro del repositorio. Se conservan los prompts correctivos y los resultados clave de la sesión; el siguiente resumen se basa en las tareas que realmente se ejecutaron durante el desarrollo y la auditoría.
 
 ### 3.1 Tareas solicitadas
 
@@ -68,7 +68,7 @@ Se solicitó al agente de IA apoyo para:
 
 ---
 
-## 4. Error real detectado y corregido
+## 4. Errores reales detectados y corregidos
 
 ### 4.1 Error documental
 
@@ -99,6 +99,21 @@ La auditoría detectó que el árbol de trabajo eliminó `DbSet<Reserva> Reserva
 - **Verificación:** build sin errores, 52/52 pruebas aprobadas y `git diff --check` sin errores.
 
 Esta decisión debe revisarse si el responsable del proyecto decide completar la integración de `Reserva` con una migración y la corrección de tipos correspondiente.
+
+### 4.4 Error de alcance del agente detectado y corregido
+
+Durante la auditoría final, el agente incluyó `PasswordPolicyTests.cs` entre los puntos pendientes de investigar y resolver para cerrar la asignación. Esa recomendación partía de una suposición incorrecta: el archivo es una prueba personal ajena a la Asignación 2 y no forma parte de los entregables.
+
+- **Qué pidió el usuario:** revisar el historial de Git, comparar `2cb9245` y `e02677e` con la etiqueta `asignacion-2`, comprobar los cambios en `README.md` y `docs/bitacora-asignacion-2.md`, verificar la sincronización con `origin/main` y recomendar los comandos de publicación sin alterar Git.
+- **Qué devolvió el agente:** un diagnóstico que detectó que `e02677e` era local, que `origin/main` y la etiqueta seguían en `2cb9245`, y que la documentación de RD-09 no estaba publicada. En ese diagnóstico incluyó `PasswordPolicyTests.cs` como un punto pendiente que no correspondía a la asignación.
+- **Detección:** el usuario identificó que el archivo era un ejercicio personal y corrigió el alcance de la tarea.
+- **Corrección:** se reiteró el prompt con esta instrucción expresa:
+
+> Existe un archivo sin seguimiento llamado `PasswordPolicyTests.cs`, pero es un ejercicio personal mío, ajeno a esta asignación. No lo incluyas, no lo investigues y no lo recomiendes para esta entrega.
+
+- **Resultado:** después de la aclaración, el diagnóstico se concentró en los entregables y en la discrepancia entre el commit local y la etiqueta publicada. El archivo no se incluyó en ningún commit ni en los comandos de publicación.
+- **Evidencia disponible:** el prompt correctivo anterior, el diagnóstico de Git de la sesión y el estado final del repositorio. No se conservaron todas las salidas crudas de la terminal.
+- **Estado final de publicación:** la rama `main`, `origin/main` y la etiqueta remota `asignacion-2` apuntan a la misma versión publicada, que incluye esta bitácora y el README con la guía manual RF-GP-01 a RF-GP-07. La publicación quedó completada después de la auditoría.
 
 ---
 
@@ -228,12 +243,14 @@ La prueba de persistencia se ejecutó el 20 de octubre de 2026 con la API en `ht
 - No hay una prueba de concurrencia real contra SQL Server; la prueba de fallo de persistencia usa un interceptor y la suite usa InMemory.
 - Las cuentas de prueba se crearon únicamente en la base desechable y se eliminaron con ella; no se versionaron credenciales.
 - La base principal `SISReservasEspacios` no se modificó durante la demostración de RD-09.
-- El cierre de la asignación se registra con el commit y el tag `asignacion-2`; la demostración de RD-09 se documenta en el `README.md` y en esta bitácora.
+- El cierre de la asignación se registra con el commit de cierre y el tag `asignacion-2`, que apuntan a la misma versión publicada; la demostración de RD-09 y la guía manual RF-GP se documentan en el `README.md` y en esta bitácora.
 
 ---
 
 ## 10. Evidencia disponible en el repositorio
 
+- `README.md`
+- `docs/bitacora-asignacion-2.md`
 - `backend/SISReservas.Api/Controllers/PermissionRequestsController.cs`
 - `backend/SISReservas.Api/Services/PermisoService.cs`
 - `backend/SISReservas.Api/Services/SolicitudPermisoService.cs`
