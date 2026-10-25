@@ -307,7 +307,7 @@ La suite automatizada también cubre este requisito con `AprobarAsync_Resolucion
 Desde la raíz del repositorio, ejecutar la suite automatizada con:
 
 ```bash
-dotnet test SISReservasEspacios.slnx --filter "FullyQualifiedName!~PasswordPolicyTests"
+dotnet test SISReservasEspacios.slnx
 ```
 
 La suite utiliza EF Core InMemory y no inicia la API ni modifica LocalDB. Las pruebas siguen el patrón Arrange–Act–Assert y verifican, entre otros aspectos, las transiciones permitidas y prohibidas, la autorización por rol y la gestión de solicitudes de permisos.
