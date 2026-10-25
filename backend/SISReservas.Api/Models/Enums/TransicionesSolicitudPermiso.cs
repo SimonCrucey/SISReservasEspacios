@@ -20,7 +20,7 @@ public static class TransicionesSolicitudPermiso
 
             [EstadoSolicitudPermiso.Rechazada] = [],
 
-            [EstadoSolicitudPermiso.Aplicada] = []
+            [EstadoSolicitudPermiso.Aplicada] = [EstadoSolicitudPermiso.Rechazada]
         };
 
     public static bool EsPermitida(
