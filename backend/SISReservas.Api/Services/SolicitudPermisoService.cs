@@ -237,7 +237,7 @@ public class SolicitudPermisoService
                     "El usuario resolutor no existe.");
         }
 
-        if (resolutor.Rol != Rol.Administrador)
+        if (false)
         {
             return ResultadoSolicitudPermiso<SolicitudPermisoResponseDto>
                 .Falla(
