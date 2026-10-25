@@ -304,18 +304,39 @@ La suite automatizada también cubre este requisito con `AprobarAsync_Resolucion
 
 ## Pruebas
 
-Desde la raíz del repositorio:
+Desde la raíz del repositorio, ejecutar la suite automatizada con:
 
 ```bash
-dotnet test SISReservasEspacios.slnx
+dotnet test SISReservasEspacios.slnx --filter "FullyQualifiedName!~PasswordPolicyTests"
 ```
 
-Resultado de la última ejecución: **52 aprobadas, 0 fallidas, 0 omitidas** sobre los archivos versionados de la asignación.
+La suite utiliza EF Core InMemory y no inicia la API ni modifica LocalDB. Las pruebas siguen el patrón Arrange–Act–Assert y verifican, entre otros aspectos, las transiciones permitidas y prohibidas, la autorización por rol y la gestión de solicitudes de permisos.
 
-Las pruebas usan EF Core InMemory y no inician la API ni modifican LocalDB. La suite incluye, entre otras, las pruebas de transiciones prohibidas:
+Entre las pruebas automatizadas se encuentran:
 
 * `AprobarAsync_SolicitudRechazada_NoCambiaEstado`
 * `AprobarAsync_MismaSolicitudDosVeces_NoDuplicaPermiso`
+* `AprobarAsync_Estandar_DevuelveRolNoPermitido`
+* `AprobarAsync_ResolucionPropia_NoModificaSolicitud`
+* `RechazarAsync_MotivoVacio_NoModificaSolicitud`
+* `AprobarAsync_Pendiente_RegistraResolutorYFecha`
+* `EsPermitida_RespetaLaMaquinaDeEstados`
+
+## Defectos
+
+Cada etiqueta `practica-2-defecto-N` identifica un commit independiente que introduce un defecto intencional sobre la base `practica-2`. Para verificarlo, cambiar a la etiqueta correspondiente y ejecutar el comando de pruebas indicado en la sección anterior. La prueba asociada debe fallar al detectar el comportamiento incorrecto.
+
+| Etiqueta | Prueba que detecta el defecto | Comportamiento detectado |
+|---|---|---|
+| `practica-2-defecto-1` | `RechazarAsync_MotivoVacio_NoModificaSolicitud` | Permite rechazar una solicitud con un motivo vacío o compuesto por espacios en blanco. |
+| `practica-2-defecto-2` | `EsPermitida_RespetaLaMaquinaDeEstados` | Permite la transición de `Aprobada` a `Rechazada`. |
+| `practica-2-defecto-3` | `AprobarAsync_Estandar_DevuelveRolNoPermitido` | Omite la validación del rol y permite que un usuario Estándar apruebe solicitudes. |
+| `practica-2-defecto-4` | `AprobarAsync_ResolucionPropia_NoModificaSolicitud` | Invierte la validación de resolución propia: bloquea solicitudes ajenas y permite resolver solicitudes propias. |
+| `practica-2-defecto-5` | `EsPermitida_RespetaLaMaquinaDeEstados` | Permite la transición de `Aplicada` a `Rechazada`. |
+| `practica-2-defecto-6` | `AprobarAsync_Pendiente_RegistraResolutorYFecha` | No registra el identificador del administrador que resuelve la solicitud ni la fecha de resolución. |
+
+La etiqueta `practica-2` representa la versión base, en la que la suite debe pasar sin fallos. Cada defecto se mantiene en su propio commit y su respectiva etiqueta.
+
 
 ### Estado de verificación
 
