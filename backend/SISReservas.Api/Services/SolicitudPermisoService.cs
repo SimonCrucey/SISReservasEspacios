@@ -396,7 +396,7 @@ public class SolicitudPermisoService
             RechazarSolicitudPermisoDto request)
     {
         if (request is null ||
-            string.IsNullOrWhiteSpace(request.MotivoRechazo))
+    request.MotivoRechazo is null)
         {
             return ResultadoSolicitudPermiso<SolicitudPermisoResponseDto>
                 .Falla(
