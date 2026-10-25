@@ -15,7 +15,8 @@ public static class TransicionesSolicitudPermiso
 
             [EstadoSolicitudPermiso.Aprobada] =
             [
-                EstadoSolicitudPermiso.Aplicada
+                EstadoSolicitudPermiso.Aplicada,
+                EstadoSolicitudPermiso.Rechazada
             ],
 
             [EstadoSolicitudPermiso.Rechazada] = [],
