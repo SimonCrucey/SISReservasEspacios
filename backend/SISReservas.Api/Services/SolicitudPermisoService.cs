@@ -293,8 +293,7 @@ public class SolicitudPermisoService
                     "La transición a Aprobada no es válida.");
         }
 
-        solicitud.ResueltaPorId = resolutorId;
-        solicitud.ResueltaEn = DateTime.UtcNow;
+       
 
         var concesion = await _permisoService.PrepararConcesionAsync(
             solicitud.SolicitanteId,
