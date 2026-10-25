@@ -245,7 +245,7 @@ public class SolicitudPermisoService
                     "Solo un Administrador puede aprobar solicitudes.");
         }
 
-        if (solicitud.SolicitanteId == resolutorId)
+        if (solicitud.SolicitanteId != resolutorId)
         {
             return ResultadoSolicitudPermiso<SolicitudPermisoResponseDto>
                 .Falla(
