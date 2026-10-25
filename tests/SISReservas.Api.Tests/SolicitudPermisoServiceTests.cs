@@ -238,6 +238,51 @@ public class SolicitudPermisoServiceTests
         Assert.NotNull(persistida.AplicadaEn);
     }
 
+
+    [Fact]
+    public async Task AprobarAsync_Estandar_DevuelveRolNoPermitido()
+    {
+        using var database = new TestDatabase();
+        using var db = database.CreateContext();
+
+        var estandar = await TestData.AgregarUsuarioAsync(
+            db,
+            Rol.Estandar,
+            nombre: "Usuario Estándar");
+
+        var solicitante = await TestData.AgregarUsuarioAsync(db);
+
+        var solicitud = await TestData.AgregarSolicitudAsync(
+            db,
+            solicitante);
+
+        var service = TestData.CrearSolicitudService(db);
+
+        var resultado = await service.AprobarAsync(
+            solicitud.Id,
+            estandar.Id);
+
+        Assert.False(resultado.Exito);
+        Assert.Equal(
+            MotivoResultadoSolicitudPermiso.RolNoPermitido,
+            resultado.Motivo);
+
+        var persistida = await db.SolicitudesPermiso
+            .AsNoTracking()
+            .SingleAsync(s => s.Id == solicitud.Id);
+
+        Assert.Equal(
+            EstadoSolicitudPermiso.Pendiente,
+            persistida.Estado);
+        Assert.Null(persistida.ResueltaPorId);
+        Assert.Null(persistida.ResueltaEn);
+
+        Assert.Empty(await db.PermisosUsuario
+            .Where(p => p.UsuarioId == solicitante.Id)
+            .ToListAsync());
+    }
+
+
     [Fact]
     public async Task AprobarAsync_ConcedePermisoEfectivo()
     {
