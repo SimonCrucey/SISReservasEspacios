@@ -126,7 +126,7 @@ public class ReservaService(SISReservasDbContext db, PermisoService permisos, Ti
 
     private async Task<bool> CumpleCondicionesConfirmacionAsync(Reserva reserva) =>
         reserva.FechaInicio < reserva.FechaFin && reserva.FechaInicio >= Ahora
-        && await db.Espacios.AnyAsync(e => e.Id == reserva.EspacioId && e.Activo)
+        && await db.Espacios.AnyAsync(e => e.Id == reserva.EspacioId)
         && !await HayConflictoAsync(reserva.EspacioId, reserva.FechaInicio, reserva.FechaFin, reserva.Id);
 
     public async Task<ResultadoReserva<ReservaResponseDto>> CancelarAsync(Guid usuarioId, int id)
