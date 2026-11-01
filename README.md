@@ -6,9 +6,9 @@ equipos con Control de acceso y Gestión de permisos.
 Estado: 138 pruebas aprobadas desde un clon local limpio y 73 verificaciones HTTP/SQL
 históricas. Las cinco etiquetas anotadas practica-3 y practica-3-defecto-1 a 4
 existen LOCALMENTE; los cuatro defectos fueron creados y detectados por la suite.
-La Práctica 3 todavía no se ha publicado en GitHub. Los flujos funcionales de
-activación y recuperación se comprobaron usando tokens de la cola; la recepción
-real de correo mediante SMTP no está demostrada.
+La Práctica 3 todavía no se ha publicado en GitHub. La recepción SMTP local y los
+flujos de activación y recuperación fueron comprobados mediante mensajes realmente
+recibidos en Mailpit: 30 verificaciones aprobadas. No se comprobó entrega a buzones externos.
 Ver [auditoría](docs/auditoria-practica-3.md).
 
 ## Requisitos previos
@@ -297,10 +297,63 @@ permanece en be2080d49a0f855112fe9849231e1927f5422966; este README actualizado s
 mantiene en un commit documental posterior de main y no cambia el contenido etiquetado.
 Las etiquetas históricas practica-1/practica-2 y defectos P2 no prueban mutantes P3.
 
+## Cierre de evidencia posterior a practica-3
+
+La base evaluable es `practica-3`, commit
+`be2080d49a0f855112fe9849231e1927f5422966`. Su README refleja el estado documental
+anterior a crear y verificar las etiquetas y a demostrar SMTP. Este cierre está
+en un commit posterior de `main`: no mueve etiquetas ni cambia el código evaluable.
+Las guías de fases anteriores se conservan como registros históricos; las
+afirmaciones de correo pendiente describen su estado en aquellas fases.
+
+| Versión o evidencia | Resultado verificado |
+| --- | --- |
+| practica-3 | 138 aprobadas, 0 fallidas desde clon local limpio, sin iniciar API |
+| practica-3-defecto-1 | 134 aprobadas, 4 fallidas: permite Cancelada → Confirmada |
+| practica-3-defecto-2 | 134 aprobadas, 4 fallidas: permite Completada → Cancelada |
+| practica-3-defecto-3 | 137 aprobadas, 1 fallida: elimina únicamente e.Activo durante confirmación; conserva las demás condiciones |
+| practica-3-defecto-4 | 136 aprobadas, 2 fallidas, incluida la integración real: permite crear sin ReservarEspacios |
+| SMTP local, 1 de noviembre de 2026 | 30 verificaciones aprobadas; seis mensajes recibidos efectivamente en Mailpit: cuatro antiguos de prueba y dos nuevos |
+
+Los dos mensajes nuevos fueron activación y recuperación de una cuenta ficticia.
+Se utilizó el enlace recibido por SMTP para activar (200) y se rechazó su segundo
+uso (400). Login devolvió sesión válida. El código recibido en el segundo mensaje
+permitió restablecer la contraseña (200), no reutilizarlo (400), rechazar la
+contraseña anterior (401), aceptar la nueva (200) y revocar la sesión previa (401).
+No se extrajeron esos tokens de la cola para completar esta demostración.
+
+La prueba utilizó exclusivamente `SISReservas_Practica3_Test`, con Mailpit ligado
+a `127.0.0.1`, sin reenvío externo ni credenciales personales. Los cuatro mensajes
+antiguos no se borraron. API y Mailpit temporales quedaron detenidos; las evidencias
+originales se conservaron fuera de Git. Este resumen no contiene secretos ni enlaces
+a archivos temporales que el evaluador no podría consultar. Es recepción SMTP
+local comprobada, no una afirmación de entrega a un proveedor de correo externo.
+
+Las cinco etiquetas anotadas están preparadas LOCALMENTE para publicación; no se
+presentan como publicadas. Cuando se autorice su publicación, desde un clon nuevo
+de la URL entregada en Moodle se puede comprobar:
+
+```powershell
+git tag --list 'practica-3*'
+$etiquetas=@('practica-3','practica-3-defecto-1','practica-3-defecto-2','practica-3-defecto-3','practica-3-defecto-4')
+foreach ($etiqueta in $etiquetas) { git cat-file -t $etiqueta }
+git checkout --detach practica-3
+git rev-parse HEAD
+dotnet test SISReservasEspacios.slnx
+```
+
+Esperado: cinco etiquetas de tipo `tag`, HEAD en la base indicada y 138/138 pruebas.
+Para cada mutante, en un clon limpio cambiar a su etiqueta y ejecutar el mismo
+comando de pruebas: debe producir los fallos pertinentes de la tabla. Comprobar
+el padre directo con `git log -1 --format="%H %P" practica-3-defecto-1` (repetir
+para 2, 3 y 4): siempre debe ser el commit base. Todos modifican solo producción;
+sus mensajes identifican archivo y línea. Los cuatro son independientes.
+
 ## Límites y entrega
 
-- Flujos funcionales de activación y recuperación comprobados por HTTP con tokens
-  extraídos de cola; recepción real de correo mediante SMTP pendiente de evidencia.
+- Activación y recuperación comprobadas desde mensajes recibidos por SMTP local;
+  entrega a buzones externos no comprobada. El escenario anterior de fase 6 usaba
+  tokens de cola y no sustituye la evidencia SMTP posterior descrita arriba.
 - Finalización automática y concurrencia simultánea SQL pendientes; seis
   funcionalidades públicas separables sí están implementadas y verificadas.
 - Avisos NU1510 y NU1902/NU1903 (System.Security.Cryptography.Pkcs 9.0.11 en pruebas).
