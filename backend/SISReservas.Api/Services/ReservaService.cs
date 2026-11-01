@@ -86,8 +86,6 @@ public class ReservaService(SISReservasDbContext db, PermisoService permisos, Ti
         if (usuario is null) return Falla(MotivoResultadoReserva.NoAutorizado, "Usuario no disponible.");
         if (!RolValido(usuario)) return Falla(MotivoResultadoReserva.Prohibido, "Rol no permitido.");
         // Consulta aislada: la autorización procede del módulo real de Gestión de permisos.
-        if (usuario.Rol == Rol.Estandar && !await permisos.TienePermisoAsync(usuarioId, Permiso.ReservarEspacios))
-            return Falla(MotivoResultadoReserva.Prohibido, "Requiere el permiso ReservarEspacios aprobado.");
         if (request is null || !IntervaloValido(request.FechaInicio, request.FechaFin) || request.FechaInicio < Ahora)
             return Falla(MotivoResultadoReserva.DatosInvalidos, "Use un intervalo futuro válido en UTC.");
 
