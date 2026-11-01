@@ -17,7 +17,7 @@ public static class TransicionesReserva
                 EstadoReserva.Cancelada
             ],
 
-            [EstadoReserva.Cancelada] = [],
+            [EstadoReserva.Cancelada] = [EstadoReserva.Confirmada],
 
             [EstadoReserva.Completada] = []
         };
