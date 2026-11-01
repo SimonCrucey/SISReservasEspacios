@@ -19,7 +19,7 @@ public static class TransicionesReserva
 
             [EstadoReserva.Cancelada] = [],
 
-            [EstadoReserva.Completada] = []
+            [EstadoReserva.Completada] = [EstadoReserva.Cancelada]
         };
 
     public static bool EsPermitida(
