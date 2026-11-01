@@ -1,0 +1,294 @@
+[
+  {
+    "Prueba": "Cuatro migraciones en catalogo aislado",
+    "Resultado": "APROBADO"
+  },
+  {
+    "Prueba": "Registro admin (correo solo en cola)",
+    "Resultado": "HTTP 200"
+  },
+  {
+    "Prueba": "Origen configurado de activacion admin",
+    "Resultado": "APROBADO"
+  },
+  {
+    "Prueba": "Activacion admin con token extraido de cola, sin SMTP",
+    "Resultado": "HTTP 200"
+  },
+  {
+    "Prueba": "Activacion de un uso admin",
+    "Resultado": "HTTP 400"
+  },
+  {
+    "Prueba": "Login admin",
+    "Resultado": "HTTP 200"
+  },
+  {
+    "Prueba": "Login devuelve token admin",
+    "Resultado": "APROBADO"
+  },
+  {
+    "Prueba": "Registro estandar (correo solo en cola)",
+    "Resultado": "HTTP 200"
+  },
+  {
+    "Prueba": "Origen configurado de activacion estandar",
+    "Resultado": "APROBADO"
+  },
+  {
+    "Prueba": "Activacion estandar con token extraido de cola, sin SMTP",
+    "Resultado": "HTTP 200"
+  },
+  {
+    "Prueba": "Activacion de un uso estandar",
+    "Resultado": "HTTP 400"
+  },
+  {
+    "Prueba": "Login estandar",
+    "Resultado": "HTTP 200"
+  },
+  {
+    "Prueba": "Login devuelve token estandar",
+    "Resultado": "APROBADO"
+  },
+  {
+    "Prueba": "Registro otro (correo solo en cola)",
+    "Resultado": "HTTP 200"
+  },
+  {
+    "Prueba": "Origen configurado de activacion otro",
+    "Resultado": "APROBADO"
+  },
+  {
+    "Prueba": "Activacion otro con token extraido de cola, sin SMTP",
+    "Resultado": "HTTP 200"
+  },
+  {
+    "Prueba": "Activacion de un uso otro",
+    "Resultado": "HTTP 400"
+  },
+  {
+    "Prueba": "Login otro",
+    "Resultado": "HTTP 200"
+  },
+  {
+    "Prueba": "Login devuelve token otro",
+    "Resultado": "APROBADO"
+  },
+  {
+    "Prueba": "Sin sesion",
+    "Resultado": "HTTP 401"
+  },
+  {
+    "Prueba": "Estandar no accede a bandeja administrativa",
+    "Resultado": "HTTP 403"
+  },
+  {
+    "Prueba": "Logout",
+    "Resultado": "HTTP 200"
+  },
+  {
+    "Prueba": "Sesion revocada",
+    "Resultado": "HTTP 401"
+  },
+  {
+    "Prueba": "Nuevo login otro",
+    "Resultado": "HTTP 200"
+  },
+  {
+    "Prueba": "Listar espacios activos",
+    "Resultado": "HTTP 200"
+  },
+  {
+    "Prueba": "Excluye espacio inactivo",
+    "Resultado": "APROBADO"
+  },
+  {
+    "Prueba": "Reserva sin permiso",
+    "Resultado": "HTTP 403"
+  },
+  {
+    "Prueba": "Sin reserva tras rechazo",
+    "Resultado": "APROBADO"
+  },
+  {
+    "Prueba": "Solicitar ReservarEspacios",
+    "Resultado": "HTTP 201"
+  },
+  {
+    "Prueba": "Permiso pendiente no autoriza",
+    "Resultado": "HTTP 403"
+  },
+  {
+    "Prueba": "Estandar no aprueba",
+    "Resultado": "HTTP 403"
+  },
+  {
+    "Prueba": "Administrador aprueba",
+    "Resultado": "HTTP 200"
+  },
+  {
+    "Prueba": "Solicitud Aplicada",
+    "Resultado": "APROBADO"
+  },
+  {
+    "Prueba": "Doble aprobacion rechazada",
+    "Resultado": "HTTP 409"
+  },
+  {
+    "Prueba": "Otra solicitud",
+    "Resultado": "HTTP 201"
+  },
+  {
+    "Prueba": "Rechazo sin motivo",
+    "Resultado": "HTTP 400"
+  },
+  {
+    "Prueba": "Administrador rechaza",
+    "Resultado": "HTTP 200"
+  },
+  {
+    "Prueba": "Solicitud Rechazada",
+    "Resultado": "APROBADO"
+  },
+  {
+    "Prueba": "Rechazada no se aprueba",
+    "Resultado": "HTTP 409"
+  },
+  {
+    "Prueba": "Disponibilidad inicial",
+    "Resultado": "HTTP 200"
+  },
+  {
+    "Prueba": "Horario inicialmente libre",
+    "Resultado": "APROBADO"
+  },
+  {
+    "Prueba": "Crear con permiso aprobado",
+    "Resultado": "HTTP 201"
+  },
+  {
+    "Prueba": "Reserva nace Pendiente",
+    "Resultado": "APROBADO"
+  },
+  {
+    "Prueba": "Rechazo solapamiento",
+    "Resultado": "HTTP 409"
+  },
+  {
+    "Prueba": "Disponibilidad ocupada",
+    "Resultado": "HTTP 200"
+  },
+  {
+    "Prueba": "Horario ocupado",
+    "Resultado": "APROBADO"
+  },
+  {
+    "Prueba": "Estandar no confirma",
+    "Resultado": "HTTP 403"
+  },
+  {
+    "Prueba": "Otro propietario no cancela",
+    "Resultado": "HTTP 404"
+  },
+  {
+    "Prueba": "Reservas propias otro usuario",
+    "Resultado": "HTTP 200"
+  },
+  {
+    "Prueba": "Otro usuario no ve reservas ajenas",
+    "Resultado": "APROBADO"
+  },
+  {
+    "Prueba": "Confirmar Administrador",
+    "Resultado": "HTTP 200"
+  },
+  {
+    "Prueba": "Reserva Confirmada",
+    "Resultado": "APROBADO"
+  },
+  {
+    "Prueba": "Horario adyacente permitido",
+    "Resultado": "HTTP 201"
+  },
+  {
+    "Prueba": "Propietario cancela confirmada",
+    "Resultado": "HTTP 200"
+  },
+  {
+    "Prueba": "Reserva Cancelada",
+    "Resultado": "APROBADO"
+  },
+  {
+    "Prueba": "Terminal no confirma",
+    "Resultado": "HTTP 409"
+  },
+  {
+    "Prueba": "Terminal no cancela de nuevo",
+    "Resultado": "HTTP 409"
+  },
+  {
+    "Prueba": "Terminal persistido intacto",
+    "Resultado": "APROBADO"
+  },
+  {
+    "Prueba": "Fechas invalidas",
+    "Resultado": "HTTP 400"
+  },
+  {
+    "Prueba": "Espacio inactivo",
+    "Resultado": "HTTP 404"
+  },
+  {
+    "Prueba": "Solicitar recuperacion (cola)",
+    "Resultado": "HTTP 200"
+  },
+  {
+    "Prueba": "Codigo de recuperacion en cola, no enviado",
+    "Resultado": "APROBADO"
+  },
+  {
+    "Prueba": "Restablecer password sin SMTP",
+    "Resultado": "HTTP 200"
+  },
+  {
+    "Prueba": "Codigo no reutilizable",
+    "Resultado": "HTTP 400"
+  },
+  {
+    "Prueba": "Recuperacion revoca sesion anterior",
+    "Resultado": "HTTP 401"
+  },
+  {
+    "Prueba": "Login password anterior",
+    "Resultado": "HTTP 401"
+  },
+  {
+    "Prueba": "Login password nueva",
+    "Resultado": "HTTP 200"
+  },
+  {
+    "Prueba": "Nueva password produce sesion",
+    "Resultado": "APROBADO"
+  },
+  {
+    "Prueba": "RD09 antes de reinicio",
+    "Resultado": "HTTP 200"
+  },
+  {
+    "Prueba": "RD09 despues de reinicio",
+    "Resultado": "HTTP 200"
+  },
+  {
+    "Prueba": "RD09 reserva Pendiente persiste",
+    "Resultado": "APROBADO"
+  },
+  {
+    "Prueba": "RD09 contenido completo conserva identidad fechas y estado",
+    "Resultado": "APROBADO"
+  },
+  {
+    "Prueba": "Correo no fue enviado",
+    "Resultado": "APROBADO"
+  }
+]

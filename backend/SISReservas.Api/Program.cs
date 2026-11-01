@@ -42,6 +42,8 @@ builder.Services.AddDbContext<SISReservasDbContext>(options =>
 builder.Services.AddScoped<PasswordService>();
 builder.Services.AddScoped<TokenService>();
 builder.Services.AddScoped<EmailQueueService>();
+builder.Services.AddScoped<EmailSenderService>();
+builder.Services.AddHostedService<EmailDispatcherService>();
 builder.Services.AddScoped<AuthService>();
 builder.Services.AddScoped<SessionService>();
 builder.Services.AddScoped<UserAdministrationService>();
@@ -49,6 +51,8 @@ builder.Services.AddScoped<PasswordRecoveryService>();
 builder.Services.AddScoped<PasswordPolicyService>();
 builder.Services.AddScoped<PermisoService>();
 builder.Services.AddScoped<SolicitudPermisoService>();
+builder.Services.AddSingleton(TimeProvider.System);
+builder.Services.AddScoped<ReservaService>();
 
 var app = builder.Build();
 

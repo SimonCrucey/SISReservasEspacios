@@ -23,17 +23,19 @@ public class EmailSenderService
         var password = Environment.GetEnvironmentVariable("SMTP_PASSWORD");
         var from = Environment.GetEnvironmentVariable("SMTP_FROM");
         var sslText = Environment.GetEnvironmentVariable("SMTP_ENABLE_SSL");
+        var useAuthText = Environment.GetEnvironmentVariable("SMTP_USE_AUTH") ?? "true";
 
         if (string.IsNullOrWhiteSpace(host) ||
             !int.TryParse(portText, out var port) ||
-            string.IsNullOrWhiteSpace(username) ||
-            string.IsNullOrWhiteSpace(password) ||
+            port < 1 || port > 65535 ||
             string.IsNullOrWhiteSpace(from) ||
-            !bool.TryParse(sslText, out var enableSsl))
+            !bool.TryParse(sslText, out var enableSsl) ||
+            !bool.TryParse(useAuthText, out var useAuth) ||
+            (useAuth && (string.IsNullOrWhiteSpace(username) || string.IsNullOrWhiteSpace(password))))
         {
             throw new InvalidOperationException(
                 "Configura SMTP_HOST, SMTP_PORT, SMTP_USERNAME, " +
-                "SMTP_PASSWORD, SMTP_FROM y SMTP_ENABLE_SSL " +
+                "SMTP_PASSWORD (si SMTP_USE_AUTH=true), SMTP_FROM y SMTP_ENABLE_SSL " +
                 "como variables de entorno.");
         }
 
@@ -51,7 +53,8 @@ public class EmailSenderService
         using var smtp = new SmtpClient(host, port)
         {
             EnableSsl = enableSsl,
-            Credentials = new NetworkCredential(username, password),
+            UseDefaultCredentials = false,
+            Credentials = useAuth ? new NetworkCredential(username, password) : null,
             DeliveryMethod = SmtpDeliveryMethod.Network,
             Timeout = 20000
         };

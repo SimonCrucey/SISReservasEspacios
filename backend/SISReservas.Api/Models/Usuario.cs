@@ -29,4 +29,5 @@ public class Usuario
     public ICollection<SolicitudPermiso> SolicitudesPermiso { get; set; } = new List<SolicitudPermiso>();
     public ICollection<SolicitudPermiso> SolicitudesResueltas { get; set; } = new List<SolicitudPermiso>();
     public ICollection<UsuarioPermiso> Permisos { get; set; } = new List<UsuarioPermiso>();
+    public ICollection<Reserva> Reservas { get; set; } = new List<Reserva>();
 }

@@ -36,4 +36,19 @@ public static class TransicionesReserva
     {
         return !EsPermitida(desde, hacia);
     }
+
+    public static void AsegurarPermitida(EstadoReserva desde, EstadoReserva hacia)
+    {
+        if (!EsPermitida(desde, hacia))
+        {
+            throw new InvalidOperationException(
+                $"Transición no permitida: {desde} → {hacia}.");
+        }
+    }
+
+    public static bool EsTerminal(EstadoReserva estado)
+    {
+        return Permitidas.TryGetValue(estado, out var destinos)
+            && destinos.Length == 0;
+    }
 }

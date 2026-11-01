@@ -1,476 +1,301 @@
-# SISReservasEspacios
+# SISReservasEspacios — Práctica 3
 
-Sistema web para gestionar reservas de espacios, usuarios y control de acceso.
+Programación III · TDS-007 · ITLA · 2026-C-3. Reservas de salones, canchas y
+equipos con Control de acceso y Gestión de permisos.
 
-## Tecnologías
-
-* C#
-* ASP.NET Core Web API
-* .NET 10
-* Entity Framework Core
-* SQL Server / LocalDB
+Estado: 138 pruebas aprobadas y 73 verificaciones HTTP/SQL históricas. Las etiquetas
+practica-3 y sus defectos aún no existen. La recepción de correo no está demostrada.
+Ver [auditoría](docs/auditoria-practica-3.md).
 
 ## Requisitos previos
 
-* .NET SDK 10.0
-* SQL Server LocalDB o una instancia compatible de SQL Server
-* Herramienta `dotnet ef` para aplicar migraciones
-* Visual Studio 2022/2026 o VS Code
+- .NET SDK 10.0 (verificado: 10.0.303), acceso a NuGet para restaurar.
+- EF Core SQL Server/Design y CLI dotnet-ef 10.0.12.
+- SQL Server compatible con EF Core 10 o SQL Server LocalDB en Windows.
+- PowerShell 7 y sqlcmd para los comandos locales de esta guía.
+- SMTP local o externo para demostrar recepción de activación y recuperación.
+  Mailpit y Docker son opcionales, no requisitos del proyecto.
+- xUnit 2.9.3, Microsoft.NET.Test.Sdk 17.14.1, EF InMemory 10.0.12:
+  se restauran según los csproj, sin instalación separada.
 
-## Ejecución del proyecto
+Si falta EF CLI, el evaluador puede instalarla manualmente:
 
-Desde la raíz del repositorio:
-
-```bash
-dotnet restore
-dotnet build
-dotnet run --project backend/SISReservas.Api/SISReservas.Api.csproj --launch-profile http
+```powershell
+dotnet tool install --global dotnet-ef --version 10.0.12
+dotnet ef --version
 ```
 
-La API se ejecuta en `http://localhost:5054` con el perfil `http` y el entorno `Development`.
+## Clon limpio y base nueva
 
-## Base de datos
+Clonar la URL entregada en Moodle. Cuando se prepare la entrega, seleccionar
+`git checkout practica-3`; actualmente esa etiqueta está pendiente. Ejecutar desde
+la raíz. No se necesita ninguna base preexistente ni SISReservas_Practica3_Test.
+En una terminal PowerShell dedicada:
 
-La configuración por defecto usa LocalDB:
-
-```text
-Server=(localdb)\MSSQLLocalDB;Database=SISReservasEspacios;Trusted_Connection=True;TrustServerCertificate=True;
+```powershell
+$evaluacionDb='SISReservas_Evaluacion_' + [guid]::NewGuid().ToString('N')
+$env:ConnectionStrings__DefaultConnection="Server=(localdb)\MSSQLLocalDB;Database=$evaluacionDb;Trusted_Connection=True;TrustServerCertificate=True;"
+$env:AppBaseUrl='http://localhost:5054'
+$env:EmailDispatcher__Enabled='false'
+sqlcmd -S '(localdb)\MSSQLLocalDB' -E -d master -Q "IF DB_ID(N'$evaluacionDb') IS NOT NULL THROW 50000, 'Destino existente; detener.', 1;" -b
+if ($LASTEXITCODE -ne 0) { throw 'No migrar: destino no verificado.' }
+Write-Output "Destino exclusivo de evaluacion: $evaluacionDb"
+dotnet restore SISReservasEspacios.slnx
+dotnet build SISReservasEspacios.slnx
+dotnet ef database update --project backend/SISReservas.Api/SISReservas.Api.csproj --connection $env:ConnectionStrings__DefaultConnection
+sqlcmd -S '(localdb)\MSSQLLocalDB' -E -d $evaluacionDb -Q 'SELECT MigrationId FROM __EFMigrationsHistory ORDER BY MigrationId;' -b
 ```
 
-La cadena se encuentra en `backend/SISReservas.Api/appsettings.json`. No se deben versionar credenciales reales.
-
-Para aplicar las migraciones:
-
-```bash
-dotnet ef database update --project backend/SISReservas.Api/SISReservas.Api.csproj
-```
-
-La migración de la Asignación 2 es `20261019220956_AgregarGestionPermisos`.
-
-## Swagger
-
-Con el perfil `http` y el entorno `Development`, Swagger está disponible en:
-
-* `http://localhost:5054/swagger`
-* `http://localhost:5054/swagger/v1/swagger.json`
-
-La API usa autenticación por token de sesión con el esquema `Bearer` (no JWT). Para obtener un token:
-
-```http
-POST /api/auth/login
-Content-Type: application/json
-
-{
-  "email": "usuario@ejemplo.com",
-  "password": "contraseña"
-}
-```
-
-La respuesta incluye `sessionToken`. Las rutas protegidas esperan:
-
-```http
-Authorization: Bearer <sessionToken>
-```
-
-No se incluyen credenciales de prueba en el repositorio.
-
-## Variables de entorno
-
-Para el envío independiente de correos mediante SMTP se utilizan las siguientes variables:
-
-| Variable          | Propósito                          |
-| ----------------- | ---------------------------------- |
-| `SMTP_HOST`       | Servidor SMTP                      |
-| `SMTP_PORT`       | Puerto del servidor SMTP           |
-| `SMTP_USERNAME`   | Usuario de autenticación SMTP      |
-| `SMTP_PASSWORD`   | Contraseña de autenticación SMTP   |
-| `SMTP_FROM`       | Dirección utilizada como remitente |
-| `SMTP_ENABLE_SSL` | Indica si se utiliza SSL/TLS       |
-
-Los valores reales de estas variables **no deben almacenarse en el repositorio**.
-
-## Control de acceso
-
-La Práctica 1 implementa:
-
-* Registro de usuarios y validación de correo.
-* Activación mediante token de un solo uso.
-* Inicio y cierre de sesión.
-* Control de sesiones.
-* Bloqueo después de cinco intentos fallidos consecutivos.
-* Roles Administrador y Estándar.
-* Administración de usuarios por parte del Administrador.
-* Recuperación y cambio de contraseña.
-* Invalidación de sesiones después de cambios de contraseña.
-* Registro de correos en `CorreoEnCola`.
-* Máquina de estados para las reservas.
-
-## Gestión de permisos (Asignación 2)
-
-La Asignación 2 implementa el flujo de solicitudes de permisos para usuarios Estándar y su resolución por Administradores.
-
-### Roles y permisos
-
-* **Administrador:** tiene acceso implícito a todos los permisos.
-* **Estándar:** solo recibe los permisos concedidos explícitamente.
-* Permisos disponibles: `GestionarUsuarios`, `RestablecerContrasenas` y `ConsultarUsuarios`.
-* Solo `ConsultarUsuarios` está habilitado para solicitudes de usuarios Estándar.
-* Los enums se serializan como enteros: `ConsultarUsuarios = 3`.
-* Estados de solicitud: `Pendiente = 1`, `Aprobada = 2`, `Rechazada = 3`, `Aplicada = 4`.
-
-### Rutas
-
-| Método | Ruta | Rol | Descripción |
-|---|---|---|---|
-| `POST` | `/api/permission-requests` | Estándar | Crea una solicitud. Cuerpo: `{ "permiso": 3 }`. Responde `201` si se crea. |
-| `GET` | `/api/permission-requests/mine` | Autenticado | Devuelve las solicitudes del usuario autenticado. |
-| `GET` | `/api/permission-requests/pending` | Administrador | Devuelve las solicitudes pendientes. |
-| `POST` | `/api/permission-requests/{id}/approve` | Administrador | Aprueba una solicitud pendiente. |
-| `POST` | `/api/permission-requests/{id}/reject` | Administrador | Rechaza una solicitud. Cuerpo: `{ "motivoRechazo": "..." }`. |
-| `GET` | `/api/users` | Autenticado | El Administrador obtiene la lista completa; un Estándar con `ConsultarUsuarios` obtiene el resumen. Sin el permiso responde `403`. |
-
-Respuestas de error esperadas:
-
-* `400`: datos inválidos, permiso inexistente o permiso no solicitable.
-* `401`: falta autenticación.
-* `403`: rol no permitido o intento de resolver la propia solicitud.
-* `404`: usuario o solicitud inexistente.
-* `409`: estado inválido, concesión duplicada, conflicto de concurrencia o usuario inactivo.
-* `500`: error de persistencia no controlado.
-
-### Flujo de aprobación y rechazo
-
-1. Un usuario Estándar crea una solicitud; queda en estado `Pendiente`.
-2. Un Administrador consulta las solicitudes pendientes.
-3. Al aprobar, la solicitud recorre `Pendiente → Aprobada → Aplicada`. `Aprobada` es un estado intermedio en memoria; el estado persistido final es `Aplicada`, con `ResueltaEn` y `AplicadaEn`.
-4. La aprobación crea la concesión efectiva en `PermisosUsuario`. El índice único por usuario y permiso evita duplicados.
-5. Al rechazar, la solicitud pasa de `Pendiente` a `Rechazada` y exige un motivo no vacío de hasta 500 caracteres.
-6. Un usuario no puede aprobar ni rechazar su propia solicitud.
-7. Una solicitud ya resuelta no puede aprobarse ni rechazarse nuevamente.
-
-### Prueba manual de RF-GP-01 a RF-GP-07
-
-#### Preparación local
-
-Para un clon limpio se necesitan tres cuentas activas: un Administrador y dos usuarios Estándar. Regístralas con `POST /api/auth/register` usando `nombre`, `email` y `password`, y actívalas. Si estás trabajando en LocalDB y no vas a usar el enlace de activación, puedes preparar el entorno local así:
-
-```sql
-UPDATE Usuarios
-SET Activo = 1
-WHERE Email IN ('admin@ejemplo.com', 'estandar.a@ejemplo.com', 'estandar.b@ejemplo.com');
-
-UPDATE Usuarios
-SET Rol = 'Administrador'
-WHERE Email = 'admin@ejemplo.com';
-```
-
-Inicia sesión con cada cuenta y guarda el `sessionToken` devuelto:
-
-```bash
-BASE=http://localhost:5054
-TOKEN_ADMIN="<sessionToken de admin>"
-TOKEN_A="<sessionToken de estandar.a>"
-TOKEN_B="<sessionToken de estandar.b>"
-```
-
-Comprueba el rol con `GET /api/auth/me`. Los enums se envían como enteros: `{"rol":1}` es Administrador y `{"rol":2}` es Estándar. Los estados son `Pendiente=1`, `Aprobada=2`, `Rechazada=3` y `Aplicada=4`.
-
-#### RF-GP-01: la solicitud nace en `Pendiente`
-
-**Rol:** Estándar A.
-
-```bash
-curl -i -X POST "$BASE/api/permission-requests" \
-  -H "Authorization: Bearer $TOKEN_A" \
-  -H "Content-Type: application/json" \
-  -d '{"permiso":3}'
-```
-
-**Esperado:** `201 Created`, con `estado: 1`, `permiso: 3`, `resueltaPorId: null` y `motivoRechazo: null`. Guarda el `id` como `SOLICITUD_A`. `GET /api/permission-requests/mine` con `TOKEN_A` debe devolver la misma solicitud en estado `Pendiente`.
-
-#### RF-GP-02: visibilidad de solicitudes pendientes
-
-**Roles:** Administrador, Estándar A y Estándar B.
-
-1. Con `TOKEN_B`, crea otra solicitud con el mismo `POST` y `{"permiso":3}`. Guarda su `id` como `SOLICITUD_B`.
-2. Con `TOKEN_ADMIN`, ejecuta `GET /api/permission-requests/pending`: debe responder `200` e incluir `SOLICITUD_A` y `SOLICITUD_B`.
-3. Con `TOKEN_A`, ejecuta `GET /api/permission-requests/mine`: debe incluir solo `SOLICITUD_A`, no `SOLICITUD_B`.
-4. Con `TOKEN_B`, `GET /api/permission-requests/mine` debe incluir solo `SOLICITUD_B`.
-5. Con `TOKEN_A`, ejecuta `GET /api/permission-requests/pending`: debe responder `403` porque el rol Estándar no puede consultar la bandeja administrativa.
-
-#### RF-GP-03: aprobación con resolutor y fecha
-
-**Rol:** Administrador.
-
-```bash
-curl -i -X POST "$BASE/api/permission-requests/$SOLICITUD_A/approve" \
-  -H "Authorization: Bearer $TOKEN_ADMIN"
-```
-
-**Esperado:** `200 OK`, con `estado: 4`, `resueltaPorId` igual al `id` del Administrador, `resueltaPorNombre` con su nombre, y `resueltaEn` y `aplicadaEn` con fecha. `Aprobada=2` es un estado intermedio en memoria; el estado persistido final es `Aplicada`. `GET /api/permission-requests/mine` con `TOKEN_A` debe mostrar los mismos datos.
-
-#### RF-GP-04: rechazo con motivo obligatorio
-
-**Rol:** Administrador.
-
-1. Intenta rechazar `SOLICITUD_B` sin motivo:
-
-```bash
-curl -i -X POST "$BASE/api/permission-requests/$SOLICITUD_B/reject" \
-  -H "Authorization: Bearer $TOKEN_ADMIN" \
-  -H "Content-Type: application/json" \
-  -d '{"motivoRechazo":""}'
-```
-
-**Esperado:** `400 Bad Request`. Después, `GET /api/permission-requests/mine` con `TOKEN_B` debe seguir mostrando `estado: 1`, `resueltaPorId: null` y `motivoRechazo: null`.
-
-2. Rechaza la misma solicitud con un motivo válido:
-
-```bash
-curl -i -X POST "$BASE/api/permission-requests/$SOLICITUD_B/reject" \
-  -H "Authorization: Bearer $TOKEN_ADMIN" \
-  -H "Content-Type: application/json" \
-  -d '{"motivoRechazo":"No cumple los requisitos"}'
-```
-
-**Esperado:** `200 OK`, con `estado: 3`, `motivoRechazo` igual al texto enviado, `resueltaPorId` y `resueltaEn` informados.
-
-#### RF-GP-05: el permiso se aplica tras la aprobación
-
-**Rol:** Estándar A.
-
-Antes de aprobar `SOLICITUD_A`, `GET /api/users` con `TOKEN_A` debe responder `403`. Después de ejecutar RF-GP-03, el mismo `GET /api/users` debe responder `200` y devolver la lista resumida de usuarios (`id` y `nombre`). No se requiere insertar nada manualmente en `PermisosUsuario`: la aprobación crea la concesión efectiva.
-
-#### RF-GP-06: doble aprobación y transición prohibida
-
-**Rol:** Administrador.
-
-1. Repite la aprobación de `SOLICITUD_A`, que ya está `Aplicada`. Debe responder `409` con el mensaje `Solo se pueden aprobar solicitudes Pendientes.`
-2. Intenta rechazar `SOLICITUD_A`. Debe responder `409` con el mensaje `Solo se pueden rechazar solicitudes Pendientes.`
-3. `GET /api/permission-requests/mine` con `TOKEN_A` debe seguir mostrando `estado: 4`, con los mismos `resueltaPorId`, `resueltaEn` y `aplicadaEn`.
-4. Opcionalmente, comprueba que no se duplicó la concesión:
-
-```sql
-SELECT COUNT(*)
-FROM PermisosUsuario
-WHERE UsuarioId = '<id de estandar.a>' AND Permiso = 'ConsultarUsuarios';
-```
-
-El resultado debe ser `1`.
-
-#### RF-GP-07: un Administrador no resuelve su propia solicitud
-
-**Roles:** Administrador original y Estándar A.
-
-La API no permite que un Administrador cree una solicitud: `POST /api/permission-requests` está restringido a `Estandar`. Para probar la resolución propia por HTTP, crea la solicitud como Estándar y después promueve temporalmente a ese usuario:
-
-1. Con `TOKEN_A`, crea `SOLICITUD_A2` con `{"permiso":3}`.
-2. Con `TOKEN_ADMIN`, ejecuta `GET /api/users` y obtén el `id` de Estándar A. Guárdalo como `ID_A`.
-3. Con `TOKEN_ADMIN`, promueve a A:
-
-```bash
-curl -i -X PUT "$BASE/api/users/$ID_A/role" \
-  -H "Authorization: Bearer $TOKEN_ADMIN" \
-  -H "Content-Type: application/json" \
-  -d '{"rol":1}'
-```
-
-**Esperado:** `204 No Content`. El cambio de rol revoca las sesiones de A.
-
-4. Inicia sesión de nuevo como A y guarda el nuevo token como `TOKEN_A_ADMIN`. `GET /api/auth/me` debe mostrar el rol `Administrador`.
-5. Con `TOKEN_A_ADMIN`, intenta aprobar su propia solicitud:
-
-```bash
-curl -i -X POST "$BASE/api/permission-requests/$SOLICITUD_A2/approve" \
-  -H "Authorization: Bearer $TOKEN_A_ADMIN"
-```
-
-**Esperado:** `403 Forbidden` con el mensaje `No puedes aprobar tu propia solicitud.`
-
-6. Opcionalmente, repite con `reject` y un motivo válido; debe responder `403` con `No puedes rechazar tu propia solicitud.`
-7. Comprueba que `SOLICITUD_A2` sigue pendiente con `GET /api/permission-requests/pending` usando `TOKEN_ADMIN`, o con `GET /api/permission-requests/mine` usando `TOKEN_A_ADMIN`.
-8. Restaura el rol de A con el Administrador original:
-
-```bash
-curl -i -X PUT "$BASE/api/users/$ID_A/role" \
-  -H "Authorization: Bearer $TOKEN_ADMIN" \
-  -H "Content-Type: application/json" \
-  -d '{"rol":2}'
-```
-
-**Esperado:** `204 No Content`. No uses la misma cuenta para promover y degradar a A, porque un Administrador no puede quitarse su propio rol.
-
-La suite automatizada también cubre este requisito con `AprobarAsync_ResolucionPropia_NoModificaSolicitud` y `RechazarAsync_ResolucionPropia_NoModificaSolicitud`.
+Esperado: cuatro migraciones, terminando en 20261101193103_AgregarEspaciosYReservas.
+La nueva migración crea Espacios y Reservas sin alterar tablas anteriores.
+Conservar el nombre y la terminal para todos los pasos. Para SQL Server externo,
+sustituir cadena/servidor por un catálogo nuevo exclusivo y facilitar credenciales
+privadamente. No usar la base principal ni guardar secretos en Git.
 
 ## Pruebas
 
-Desde la raíz del repositorio, ejecutar la suite automatizada con:
+Un comando ejecuta **toda** la suite desde un clon limpio, sin filtros:
 
-```bash
+```powershell
 dotnet test SISReservasEspacios.slnx
 ```
 
-La suite utiliza EF Core InMemory y no inicia la API ni modifica LocalDB. Las pruebas siguen el patrón Arrange–Act–Assert y verifican, entre otros aspectos, las transiciones permitidas y prohibidas, la autorización por rol y la gestión de solicitudes de permisos.
+Restaura y compila automáticamente. No requiere API, SQL ni SMTP. Usa servicios
+reales sobre EF InMemory con bases independientes. Resultado actual: 138 aprobadas,
+0 fallidas, 0 omitidas. No sustituye persistencia SQL ni recepción de correo.
 
-Entre las pruebas automatizadas se encuentran:
+## Variables de entorno y correo
 
-* `AprobarAsync_SolicitudRechazada_NoCambiaEstado`
-* `AprobarAsync_MismaSolicitudDosVeces_NoDuplicaPermiso`
-* `AprobarAsync_Estandar_DevuelveRolNoPermitido`
-* `AprobarAsync_ResolucionPropia_NoModificaSolicitud`
-* `RechazarAsync_MotivoVacio_NoModificaSolicitud`
-* `AprobarAsync_Pendiente_RegistraResolutorYFecha`
-* `EsPermitida_RespetaLaMaquinaDeEstados`
+| Variable | Uso |
+| --- | --- |
+| ConnectionStrings__DefaultConnection | Catálogo nuevo exclusivo |
+| AppBaseUrl | Origen del enlace de activación: HTTPS o HTTP loopback local |
+| EmailDispatcher__Enabled | false: solo cola; true: despacho cada diez segundos |
+| SMTP_HOST / SMTP_PORT | Host y puerto SMTP |
+| SMTP_FROM | Remitente permitido |
+| SMTP_ENABLE_SSL | true para TLS; false solo según capturador local |
+| SMTP_USE_AUTH | true por defecto; false para captura local sin autenticación |
+| SMTP_USERNAME / SMTP_PASSWORD | Credenciales privadas cuando se autentica |
+
+El servicio hospedado resuelve EmailSenderService con scope por ciclo. Un fallo
+no detiene la API; el mensaje puede seguir Pendiente. Una sola instancia debe
+despachar la cola. Para un capturador local **ya preparado** en 127.0.0.1:1025:
+
+```powershell
+$env:SMTP_HOST='127.0.0.1'
+$env:SMTP_PORT='1025'
+$env:SMTP_FROM='reservas@test.invalid'
+$env:SMTP_ENABLE_SSL='false'
+$env:SMTP_USE_AUTH='false'
+$env:EmailDispatcher__Enabled='true'
+```
+
+Para SMTP externo usar host, puerto, remitente y TLS del proveedor, SMTP_USE_AUTH=true
+y credenciales privadas en el proceso/gestor de secretos, nunca en Git. AppBaseUrl
+debe ser accesible donde se abra el enlace; en producción configurar origen HTTPS.
+Preparación opcional de Mailpit en [guía local](docs/control-acceso-local.md).
+No se presupone instalado. Captura SMTP local no equivale a entrega externa.
+Leer tokens de CorreosEnCola no demuestra recepción del correo.
+
+## Arranque y Swagger
+
+En la terminal configurada:
+
+```powershell
+dotnet run --project backend/SISReservas.Api/SISReservas.Api.csproj --launch-profile http
+```
+
+API: http://localhost:5054. Swagger: http://localhost:5054/swagger.
+El perfil http usa Development. La raíz `/` puede responder 404: no hay interfaz allí.
+Las peticiones siguientes se ejecutan con **Try it out** en Swagger, cuerpos JSON.
+Esquema interno Session, no JWT: login devuelve sessionToken. En Authorize pegar
+el token; verificar `Authorization: Bearer <sessionToken>`. Alternar tokens al
+cambiar cuenta. En otra terminal SQL conservar el mismo valor de $evaluacionDb.
+
+## Control de acceso y revisión acumulada
+
+### Registro y activación por correo
+
+1. Con SMTP habilitado, POST `/api/auth/register` con `nombre`, `email` y `password`.
+   Usar correo recibible en el entorno elegido y contraseña propia con al menos
+   ocho caracteres, letras y números. Esperado: 200 y cuenta Estándar inactiva.
+2. Abrir el enlace **recibido**: GET `/api/auth/activate?email=...&token=...`, 200.
+   Repetirlo: 400. Antes de activar no debe obtenerse sessionToken válido.
+3. POST `/api/auth/resend-activation` con un string JSON del correo permite
+   reenviar a una cuenta todavía inactiva. Verificar el nuevo mensaje recibido.
+
+Preparar dos Estándar y una cuenta destinada a Administrador. Si se leen tokens
+de la cola para preparar cuentas sin SMTP, declararlo: no acredita activación por correo.
+
+### Preparación del primer Administrador
+
+No hay endpoint público de promoción inicial. Registrar y activar la cuenta y,
+solo en el catálogo nuevo, promoverla antes del login. Sustituir el correo por el
+real de esa cuenta de evaluación:
+
+```powershell
+sqlcmd -S '(localdb)\MSSQLLocalDB' -E -d $evaluacionDb -Q "UPDATE Usuarios SET Rol='Administrador' WHERE Email='admin@evaluacion.test.invalid'; SELECT Email,Rol,Activo FROM Usuarios;" -b
+```
+
+Ese correo es un identificador de ejemplo, no un buzón externo. No usarlo sin
+sustituir si se evalúa correo externo. Confirmar rol mediante GET `/api/auth/me`.
+
+### Login, logout y rechazo administrativo
+
+- POST `/api/auth/login` con `email`, `password`: 200 y sessionToken no vacío.
+- GET `/api/auth/me` con token: 200, identidad y rol.
+- Como Estándar, GET `/api/permission-requests/pending`: 403; sin token, 401.
+- POST `/api/auth/logout`: 200. Reutilizar token en `/api/auth/me`: 401.
+- Volver a iniciar sesión para continuar. Un 200 sin sessionToken de una cuenta
+  inactiva o bloqueada no significa login exitoso.
+
+### Recuperación
+
+1. POST `/api/passwords/recovery` con `email`: 200, respuesta genérica.
+2. Leer el código **recibido**. No se construye un enlace de recuperación.
+3. POST `/api/passwords/reset` con `token` y `nuevaPassword`: 200.
+4. Reutilizar código: 400. Sesión anterior en `/api/auth/me`: 401.
+   Login con contraseña anterior: 401; nueva: 200 y sessionToken.
+
+## Gestión de permisos
+
+Enums JSON: GestionarUsuarios=1, RestablecerContrasenas=2, ConsultarUsuarios=3,
+ReservarEspacios=4. Solo 3 y 4 son solicitables. Administrador tiene permisos
+implícitos. Estados: Pendiente=1, Aprobada=2, Rechazada=3, Aplicada=4.
+
+1. Como Estándar, POST `/api/permission-requests` con `{ "permiso": 4 }`:
+   201/Pendiente. Guardar su id GUID como SOLICITUD.
+2. GET `/api/permission-requests/mine`: solo propias. Administrador consulta
+   GET `/api/permission-requests/pending`. Estándar en esta última ruta recibe 403.
+3. Antes de aprobar, crear reserva según la sección siguiente: 403 y mine sin
+   reserva del intento. Con solicitud Pendiente sigue sin poder reservar.
+4. Como Administrador, POST `/api/permission-requests/{SOLICITUD}/approve`:
+   200/Aplicada, resolutor y fechas. Aprobada es intermedio; se concede permiso.
+5. Repetir approve o intentar reject de esa solicitud: 409; mine conserva estado 4.
+6. Otro Estándar solicita permiso 3. Administrador ejecuta POST
+   `/api/permission-requests/{id}/reject` con `{ "motivoRechazo": "" }`: 400 y
+   sigue Pendiente. Con motivo no vacío de hasta 500 caracteres: 200/Rechazada.
+   Aprobar la rechazada: 409; mine mantiene estado 3 y motivo.
+
+GET `/api/users`: Administrador ve lista completa; Estándar sin permiso 3 recibe
+403 y, después de aprobarlo, recibe resumen de id/nombre.
+No se permite resolver solicitud propia: pruebas AprobarAsync_ResolucionPropia_NoModificaSolicitud
+y RechazarAsync_ResolucionPropia_NoModificaSolicitud.
+
+## Espacios de evaluación
+
+No hay endpoint de administración de espacios. Insertar solo en el catálogo nuevo,
+sin operaciones concurrentes. Consultar Id reales, no asumir que empiezan en 1:
+
+```powershell
+sqlcmd -S '(localdb)\MSSQLLocalDB' -E -d $evaluacionDb -Q "INSERT INTO Espacios (Nombre,Tipo,Activo) VALUES (N'Salon Evaluacion','Salon',1),(N'Cancha Evaluacion','Cancha',1),(N'Equipo Evaluacion','Equipo',1),(N'Equipo Inactivo','Equipo',0); SELECT Id,Nombre,Tipo,Activo FROM Espacios;" -b
+```
+
+SQL almacena Tipo string; JSON: Salon=1, Cancha=2, Equipo=3.
+
+## Funcionalidades de Reservas
+
+Todos los endpoints exigen sesión y rol Estandar/Administrador. Solo crear exige
+ReservarEspacios al Estándar; Administrador crea sin concesión explícita.
+Usar fechas UTC con Z, inicio anterior al fin y no pasado. Los ejemplos de 2035
+se sustituyen por fechas futuras al evaluar.
+
+| Funcionalidad separable | Petición | Esperado |
+| --- | --- | --- |
+| Listar activos | GET `/api/reservas/espacios` | 200, excluye inactivos |
+| Disponibilidad | GET `/api/reservas/espacios/{ESPACIO}/disponibilidad?inicio=2035-01-02T12:00:00Z&fin=2035-01-02T13:00:00Z` | disponible true antes y false tras reservar |
+| Crear | POST `/api/reservas`, cuerpo inferior | 201/Pendiente; sin permiso aprobado 403 |
+| Consultar propias | GET `/api/reservas/mine` | 200; otro Estándar no ve la reserva |
+| Confirmar | POST `/api/reservas/{RESERVA}/confirmar`, Administrador | 200/Confirmada; Estándar 403 |
+| Cancelar | POST `/api/reservas/{RESERVA}/cancelar`, propietario o Administrador | 200/Cancelada desde Pendiente o Confirmada; ajeno 404 |
+| Completar internamente | ReservaService.CompletarAsync, sin endpoint | Solo Confirmada con intervalo finalizado; prueba de servicio |
+
+```json
+{
+  "espacioId": 1,
+  "fechaInicio": "2035-01-02T12:00:00Z",
+  "fechaFin": "2035-01-02T13:00:00Z"
+}
+```
+
+Sustituir espacioId por el consultado y guardar respuesta id como RESERVA. Usar
+intervalos distintos o reservas nuevas para probar independientemente cada caso.
+No reutilizar una reserva terminal para probar una transición permitida.
+
+- Repetir intervalo: 409. Crear 13:00–14:00: 201 (adyacente).
+- Fin igual/anterior al inicio: 400; espacio inexistente/inactivo: 404.
+- Confirmar exige espacio activo, inicio < fin, inicio no pasado y ausencia de
+  conflicto con otras Pendientes/Confirmadas, excluyendo la propia.
+- Para provocar condición incumplida: crear una Pendiente, desactivar solo su
+  espacio de prueba con SQL y confirmar como Administrador: 409, mine mantiene
+  Pendiente. Reactivar después. Comandos SQL exactos (reemplazar 1 por Id real):
+
+```powershell
+sqlcmd -S '(localdb)\MSSQLLocalDB' -E -d $evaluacionDb -Q 'UPDATE Espacios SET Activo=0 WHERE Id=1;' -b
+# Ejecutar el intento HTTP y consultar mine antes de reactivar.
+sqlcmd -S '(localdb)\MSSQLLocalDB' -E -d $evaluacionDb -Q 'UPDATE Espacios SET Activo=1 WHERE Id=1;' -b
+```
+
+Cancelar una Pendiente nueva prueba la primera cancelación; confirmar otra reserva
+y cancelarla prueba la segunda. Estados JSON: Pendiente=1, Confirmada=2,
+Cancelada=3, Completada=4. Solo bloquean Pendientes/Confirmadas del mismo espacio:
+inicioNuevo < finExistente && finNuevo > inicioExistente.
+
+### Prohibida y estados terminales
+
+Cancelar una reserva (estado 3). Confirmarla como Administrador: 409; cancelarla
+otra vez: 409. Consultar `/api/reservas/mine` como propietario: mismo Id, fechas y
+estado 3. Demuestra Cancelada → Confirmada prohibida y que Cancelada es terminal.
+
+Los cuatro pares prohibidos y todas las salidas de Cancelada/Completada se prueban
+en TransicionesReservaTests. Completada se prueba en Completar_SoloPermiteIntervaloFinalizado
+y Completar_EstadoNoPermitido_NoModifica. El método es interno; **no hay tarea que
+lo invoque automáticamente**, endpoint ni comando de producción para hacerlo.
+Ver [máquina de estados y cobertura por fila](docs/maquina-de-estados.md).
+
+## Persistencia RD-09
+
+1. Crear una reserva Pendiente por HTTP y guardar respuesta completa.
+2. Detener API con Ctrl+C, sin eliminar/recrear base ni reinsertar datos.
+3. En la misma terminal y con la misma cadena, repetir el comando de arranque.
+4. Iniciar sesión otra vez y GET `/api/reservas/mine`: mismos Id, EspacioId, fechas
+   y Estado. No volver a crear la reserva.
+
+Comprobado mediante reinicio de proceso en [fase 6](docs/verificacion-fase-6.md)
+y [evidencia de 73 verificaciones](docs/evidencia-fase-6.json). La base histórica
+no forma parte de la entrega y el profesor no depende de ella.
+
+Opcional: scripts/Validar-Fase6.ps1 automatiza sin SMTP contra un catálogo nuevo,
+vacío y recién migrado con nombre fijo SISReservas_Practica3_Test. No es el comando
+de suite ni un requisito. Rechaza bases con usuarios, no borra ni aplica migraciones.
+Su preparación de roles y lectura de tokens de cola no demuestran correo real.
 
 ## Defectos
 
-Cada etiqueta `practica-2-defecto-N` identifica un commit independiente que introduce un defecto intencional sobre la base `practica-2`. Para verificarlo, cambiar a la etiqueta correspondiente y ejecutar el comando de pruebas indicado en la sección anterior. La prueba asociada debe fallar al detectar el comportamiento incorrecto.
+Plan de Práctica 3: **no plantados ni ejecutados**. Las pruebas existen; falta
+confirmar que detectan los cambios al ejecutarlos y preparar sus etiquetas.
 
-| Etiqueta | Prueba que detecta el defecto | Comportamiento detectado |
-|---|---|---|
-| `practica-2-defecto-1` | `RechazarAsync_MotivoVacio_NoModificaSolicitud` | Permite rechazar una solicitud con un motivo vacío o compuesto por espacios en blanco. |
-| `practica-2-defecto-2` | `EsPermitida_RespetaLaMaquinaDeEstados` | Permite la transición de `Aprobada` a `Rechazada`. |
-| `practica-2-defecto-3` | `AprobarAsync_Estandar_DevuelveRolNoPermitido` | Omite la validación del rol y permite que un usuario Estándar apruebe solicitudes. |
-| `practica-2-defecto-4` | `AprobarAsync_ResolucionPropia_NoModificaSolicitud` | Invierte la validación de resolución propia: bloquea solicitudes ajenas y permite resolver solicitudes propias. |
-| `practica-2-defecto-5` | `EsPermitida_RespetaLaMaquinaDeEstados` | Permite la transición de `Aplicada` a `Rechazada`. |
-| `practica-2-defecto-6` | `AprobarAsync_Pendiente_RegistraResolutorYFecha` | No registra el identificador del administrador que resuelve la solicitud ni la fecha de resolución. |
+| Etiqueta pendiente | Defecto | Prueba que lo detectaría | Comportamiento verificado |
+| --- | --- | --- | --- |
+| practica-3-defecto-1 | Permitir Cancelada → Confirmada | TransicionesReservaTests.AsegurarPermitida_ProhibidaDocumentada_RechazaSinCambiarReserva(Cancelada, Confirmada) | Rechazo y estado intacto |
+| practica-3-defecto-2 | Añadir salida desde un terminal | TransicionesReservaTests.AsegurarPermitida_DesdeTerminal_RechazaCualquierDestino | Ningún destino permitido desde Cancelada/Completada |
+| practica-3-defecto-3 | Retirar comprobación CumpleCondicionesConfirmacionAsync en ConfirmarAsync | ReservaServiceTests.Confirmar_CondicionIncumplida_RechazaSinCambiarEstado("inactivo") | Espacio inactivo no se confirma, conserva Pendiente; otros casos: fechas, conflicto, pasado |
+| practica-3-defecto-4 | Retirar únicamente consulta de permiso en CrearAsync | ReservasAutorizacionTests.Crear_SolicitudPendienteRechazaYTrasAprobacionRealPermite | Antes de aprobar rechaza sin crear; tras aprobación real permite al mismo Estándar |
 
-La etiqueta `practica-2` representa la versión base, en la que la suite debe pasar sin fallos. Cada defecto se mantiene en su propio commit y su respectiva etiqueta.
+Cada commit defecto debe ser hijo directo del mismo commit practica-3, tocar solo
+producción, nunca pruebas, y su mensaje indicar archivo y línea exacta cambiada.
+Sobre practica-3 pasa toda la suite; sobre cada defecto falla al menos una prueba,
+y el defecto 4 debe fallar en integración. Los cuatro defectos no forman una cadena.
+No se han creado commits ni etiquetas durante la preparación por fases.
+Las etiquetas históricas practica-1/practica-2 y defectos P2 no prueban mutantes P3.
 
+## Límites y entrega
 
-### Estado de verificación
-
-Comprobado anteriormente:
-
-* Swagger UI respondió `200`.
-* `/swagger/v1/swagger.json` respondió `200`.
-* Sin autenticación, `GET /api/permission-requests/mine`, `GET /api/permission-requests/pending` y `GET /api/users` respondieron `401`.
-* La migración `20261019220956_AgregarGestionPermisos` fue aplicada y sus tablas fueron verificadas en LocalDB.
-
-### Demostración de RD-09
-
-El 20 de octubre de 2026 se demostró RD-09 con una base LocalDB aislada y desechable:
-
-1. Se creó la base `SISReservasEspacios_RD09_20261020_Audit`.
-2. Se aplicaron las migraciones con un script idempotente de `dotnet ef` y `sqlcmd`, sin ejecutar `dotnet ef database update` sobre la base principal.
-3. Se registraron tres usuarios de prueba y se activaron o promovieron únicamente en la base desechable.
-4. Se crearon dos solicitudes: una fue aprobada y la otra rechazada.
-5. Se detuvo la API y se inició de nuevo sobre la misma base.
-6. Tras el reinicio se comprobó que:
-   * La solicitud aprobada seguía en estado `Aplicada` y el permiso `ConsultarUsuarios` seguía concedido.
-   * La solicitud rechazada seguía en estado `Rechazada` con su motivo.
-   * `GET /api/permission-requests/mine` devolvió ambas solicitudes.
-   * `GET /api/users` respondió `200` para el usuario con el permiso concedido.
-   * `GET /api/permission-requests/pending` devolvió `0`.
-7. La base de prueba se eliminó al finalizar. La base `SISReservasEspacios` no se modificó.
-
-Pendiente:
-
-* Probar la matriz HTTP completa de errores y transiciones.
-* Probar concurrencia real contra SQL Server.
-
-Las comprobaciones HTTP de solo lectura no equivalen por sí solas a una prueba HTTP completa; la demostración de RD-09 sí incluyó escrituras, reinicio y consulta posterior en una base aislada.
-
-## Cómo probar los criterios de aceptación de la Práctica 1
-
-### Registro y activación
-
-1. Registrar un usuario con un correo válido.
-2. Intentar registrar nuevamente el mismo correo.
-3. Intentar registrar una contraseña de menos de 8 caracteres o sin letras y números.
-4. Intentar registrar un correo con formato inválido.
-5. Verificar que la cuenta queda inactiva antes de la activación.
-6. Utilizar el enlace de activación recibido.
-7. Intentar utilizar nuevamente el mismo enlace.
-8. Verificar que el token no puede reutilizarse.
-
-### Sesión
-
-1. Intentar iniciar sesión con credenciales incorrectas.
-2. Verificar que la respuesta no indica si falló el correo o la contraseña.
-3. Iniciar sesión correctamente.
-4. Consultar el usuario autenticado.
-5. Cerrar sesión.
-6. Intentar utilizar nuevamente la credencial de sesión.
-7. Realizar cinco intentos consecutivos con contraseña incorrecta.
-8. Intentar iniciar sesión con la contraseña correcta durante el bloqueo.
-
-### Roles y administración
-
-1. Iniciar sesión como usuario Estándar.
-2. Intentar acceder manualmente a una operación exclusiva del Administrador.
-3. Intentar cambiar un rol siendo Estándar.
-4. Iniciar sesión como Administrador.
-5. Consultar la lista de usuarios y verificar rol y estado.
-6. Cambiar el rol de un usuario.
-7. Desactivar y reactivar un usuario.
-8. Intentar desactivar la propia cuenta del Administrador.
-
-### Recuperación y contraseñas
-
-1. Solicitar recuperación utilizando un correo existente.
-2. Solicitar recuperación utilizando un correo inexistente y comprobar que la respuesta sea equivalente.
-3. Utilizar el código recibido.
-4. Intentar reutilizar el mismo código.
-5. Intentar utilizar un código expirado.
-6. Comprobar que la contraseña anterior deja de funcionar después del cambio.
-7. Comprobar que las sesiones anteriores quedan invalidadas.
-8. Cambiar la contraseña proporcionando la contraseña actual incorrecta y verificar el rechazo.
-
-### Correos en cola
-
-Los correos de activación, recuperación y restablecimiento forzado deben registrarse en `CorreoEnCola`.
-
-Si el servidor SMTP no está disponible, la operación principal debe poder completarse y el correo debe permanecer pendiente en la cola.
-
-Las credenciales SMTP se proporcionan mediante variables de entorno y nunca deben almacenarse en el repositorio.
-
-### Máquina de estados
-
-La máquina de estados de `Reserva` se encuentra documentada en:
-
-```text
-docs/maquina-de-estados.md
-```
-
-Los estados se encuentran centralizados en `EstadoReserva` y las transiciones en `TransaccionesReserva`.
-
-## Estructura principal
-
-```text
-SISReservasEspacios/
-├── backend/
-│   └── SISReservas.Api/
-│       ├── Controllers/
-│       ├── Data/
-│       ├── DTOs/
-│       ├── Migrations/
-│       ├── Models/
-│       ├── Services/
-│       └── Program.cs
-├── docs/
-│   ├── bitacora-asignacion-1.md
-│   ├── bitacora-asignacion-2.md
-│   └── maquina-de-estados.md
-├── tests/
-│   └── SISReservas.Api.Tests/
-├── SISReservasEspacios.slnx
-└── README.md
-```
-
-## Seguridad
-
-No incluir en commits:
-
-* Contraseñas reales.
-* Credenciales SMTP.
-* Tokens de activación o recuperación.
-* Archivos generados o secretos de configuración.
-
-## Práctica 1
-
-El punto de entrega de la Práctica 1 corresponde al tag:
-
-```text
-practica-1
-```
+- Recepción de correo pendiente: HTTP se probó con tokens extraídos de cola.
+- Finalización automática y concurrencia simultánea SQL pendientes; seis
+  funcionalidades públicas separables sí están implementadas y verificadas.
+- Avisos NU1510 y NU1902/NU1903 (System.Security.Cryptography.Pkcs 9.0.11 en pruebas).
+- Antes de etiquetar, incluir en Git archivos nuevos de producción, migración,
+  pruebas y documentación que aún aparecen con ??; no versionar bin/obj, tokens,
+  contraseñas, entorno ni secretos SMTP.
+- Notificaciones/reportes de Reservas: semana 10. Adjuntos: opcionales; no implementados.

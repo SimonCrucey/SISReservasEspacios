@@ -63,6 +63,82 @@ namespace SISReservas.Api.Migrations
                     b.ToTable("CorreosEnCola");
                 });
 
+            modelBuilder.Entity("SISReservas.Api.Models.Espacio", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<bool>("Activo")
+                        .HasColumnType("bit");
+
+                    b.Property<string>("Nombre")
+                        .IsRequired()
+                        .HasMaxLength(150)
+                        .HasColumnType("nvarchar(150)");
+
+                    b.Property<string>("Tipo")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("nvarchar(30)");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("Espacios", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_Espacios_Nombre", "LEN(LTRIM(RTRIM([Nombre]))) > 0");
+
+                            t.HasCheckConstraint("CK_Espacios_Tipo", "[Tipo] IN ('Salon', 'Cancha', 'Equipo')");
+                        });
+                });
+
+            modelBuilder.Entity("SISReservas.Api.Models.Reserva", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("EspacioId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("Estado")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("nvarchar(30)");
+
+                    b.Property<DateTime>("FechaFin")
+                        .HasColumnType("datetime2");
+
+                    b.Property<DateTime>("FechaInicio")
+                        .HasColumnType("datetime2");
+
+                    b.Property<Guid>("UsuarioId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Estado");
+
+                    b.HasIndex("FechaFin");
+
+                    b.HasIndex("FechaInicio");
+
+                    b.HasIndex("UsuarioId");
+
+                    b.HasIndex("EspacioId", "Estado", "FechaInicio", "FechaFin");
+
+                    b.ToTable("Reservas", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_Reservas_Estado", "[Estado] IN ('Pendiente', 'Confirmada', 'Cancelada', 'Completada')");
+
+                            t.HasCheckConstraint("CK_Reservas_Fechas", "[FechaFin] > [FechaInicio]");
+                        });
+                });
+
             modelBuilder.Entity("SISReservas.Api.Models.Sesion", b =>
                 {
                     b.Property<Guid>("Id")
@@ -264,6 +340,25 @@ namespace SISReservas.Api.Migrations
                     b.Navigation("Usuario");
                 });
 
+            modelBuilder.Entity("SISReservas.Api.Models.Reserva", b =>
+                {
+                    b.HasOne("SISReservas.Api.Models.Espacio", "Espacio")
+                        .WithMany("Reservas")
+                        .HasForeignKey("EspacioId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("SISReservas.Api.Models.Usuario", "Usuario")
+                        .WithMany("Reservas")
+                        .HasForeignKey("UsuarioId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Espacio");
+
+                    b.Navigation("Usuario");
+                });
+
             modelBuilder.Entity("SISReservas.Api.Models.Sesion", b =>
                 {
                     b.HasOne("SISReservas.Api.Models.Usuario", "Usuario")
@@ -315,11 +410,18 @@ namespace SISReservas.Api.Migrations
                     b.Navigation("Usuario");
                 });
 
+            modelBuilder.Entity("SISReservas.Api.Models.Espacio", b =>
+                {
+                    b.Navigation("Reservas");
+                });
+
             modelBuilder.Entity("SISReservas.Api.Models.Usuario", b =>
                 {
                     b.Navigation("Correos");
 
                     b.Navigation("Permisos");
+
+                    b.Navigation("Reservas");
 
                     b.Navigation("Sesiones");
 

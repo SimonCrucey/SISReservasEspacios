@@ -38,6 +38,7 @@ public class AuthService
     public async Task<AuthResponse> RegisterAsync(
         RegisterRequest request)
     {
+        var activationBaseUrl = GetActivationBaseUrl();
         var email = NormalizeEmail(request.Email);
 
         if (!PasswordPolicy.IsValid(request.Password))
@@ -89,7 +90,7 @@ public class AuthService
         _db.TokensAcceso.Add(token);
 
         var activationUrl =
-            $"https://localhost:7014/api/auth/activate?email={Uri.EscapeDataString(usuario.Email)}&token={Uri.EscapeDataString(rawToken)}";
+            $"{activationBaseUrl}/api/auth/activate?email={Uri.EscapeDataString(usuario.Email)}&token={Uri.EscapeDataString(rawToken)}";
 
         await _db.SaveChangesAsync();
 
@@ -141,6 +142,7 @@ public class AuthService
     public async Task<AuthResponse> ResendActivationAsync(
         string email)
     {
+        var activationBaseUrl = GetActivationBaseUrl();
         var normalizedEmail = NormalizeEmail(email);
 
         var usuario = await _db.Usuarios
@@ -173,7 +175,7 @@ public class AuthService
         _db.TokensAcceso.Add(token);
 
         var activationUrl =
-            $"https://localhost:7014/api/auth/activate?email={Uri.EscapeDataString(usuario.Email)}&token={Uri.EscapeDataString(rawToken)}";
+            $"{activationBaseUrl}/api/auth/activate?email={Uri.EscapeDataString(usuario.Email)}&token={Uri.EscapeDataString(rawToken)}";
 
         await _db.SaveChangesAsync();
 
@@ -205,6 +207,18 @@ public class AuthService
         }
 
         await _db.SaveChangesAsync();
+    }
+
+    private string GetActivationBaseUrl()
+    {
+        if (!Uri.TryCreate(_configuration["AppBaseUrl"], UriKind.Absolute, out var uri)
+            || (uri.Scheme != Uri.UriSchemeHttps && !(uri.Scheme == Uri.UriSchemeHttp && uri.IsLoopback))
+            || !string.IsNullOrEmpty(uri.UserInfo) || !string.IsNullOrEmpty(uri.Query)
+            || !string.IsNullOrEmpty(uri.Fragment) || uri.AbsolutePath != "/")
+        {
+            throw new InvalidOperationException("Configura AppBaseUrl con un origen HTTPS o HTTP de loopback para desarrollo.");
+        }
+        return uri.GetLeftPart(UriPartial.Authority);
     }
 
     private static string NormalizeEmail(string email)
