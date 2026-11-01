@@ -3,8 +3,12 @@
 Programación III · TDS-007 · ITLA · 2026-C-3. Reservas de salones, canchas y
 equipos con Control de acceso y Gestión de permisos.
 
-Estado: 138 pruebas aprobadas y 73 verificaciones HTTP/SQL históricas. Las etiquetas
-practica-3 y sus defectos aún no existen. La recepción de correo no está demostrada.
+Estado: 138 pruebas aprobadas desde un clon local limpio y 73 verificaciones HTTP/SQL
+históricas. Las cinco etiquetas anotadas practica-3 y practica-3-defecto-1 a 4
+existen LOCALMENTE; los cuatro defectos fueron creados y detectados por la suite.
+La Práctica 3 todavía no se ha publicado en GitHub. Los flujos funcionales de
+activación y recuperación se comprobaron usando tokens de la cola; la recepción
+real de correo mediante SMTP no está demostrada.
 Ver [auditoría](docs/auditoria-practica-3.md).
 
 ## Requisitos previos
@@ -27,8 +31,8 @@ dotnet ef --version
 
 ## Clon limpio y base nueva
 
-Clonar la URL entregada en Moodle. Cuando se prepare la entrega, seleccionar
-`git checkout practica-3`; actualmente esa etiqueta está pendiente. Ejecutar desde
+Clonar la URL entregada en Moodle. Después de publicar las etiquetas, seleccionar
+`git checkout practica-3`; actualmente solo existe localmente. Ejecutar desde
 la raíz. No se necesita ninguna base preexistente ni SISReservas_Practica3_Test.
 En una terminal PowerShell dedicada:
 
@@ -272,30 +276,35 @@ Su preparación de roles y lectura de tokens de cola no demuestran correo real.
 
 ## Defectos
 
-Plan de Práctica 3: **no plantados ni ejecutados**. Las pruebas existen; falta
-confirmar que detectan los cambios al ejecutarlos y preparar sus etiquetas.
+Los cuatro defectos están **creados y detectados**. Las cinco etiquetas anotadas
+existen LOCALMENTE y aún no se han publicado en GitHub. Una auditoría en clon local
+limpio confirmó 138/138 pruebas en practica-3 y fallos pertinentes en cada mutante.
 
-| Etiqueta pendiente | Defecto | Prueba que lo detectaría | Comportamiento verificado |
+| Etiqueta local | Defecto | Prueba que lo detectó | Comportamiento verificado |
 | --- | --- | --- | --- |
 | practica-3-defecto-1 | Permitir Cancelada → Confirmada | TransicionesReservaTests.AsegurarPermitida_ProhibidaDocumentada_RechazaSinCambiarReserva(Cancelada, Confirmada) | Rechazo y estado intacto |
-| practica-3-defecto-2 | Añadir salida desde un terminal | TransicionesReservaTests.AsegurarPermitida_DesdeTerminal_RechazaCualquierDestino | Ningún destino permitido desde Cancelada/Completada |
-| practica-3-defecto-3 | Retirar comprobación CumpleCondicionesConfirmacionAsync en ConfirmarAsync | ReservaServiceTests.Confirmar_CondicionIncumplida_RechazaSinCambiarEstado("inactivo") | Espacio inactivo no se confirma, conserva Pendiente; otros casos: fechas, conflicto, pasado |
+| practica-3-defecto-2 | Permitir Completada → Cancelada, salida de un terminal | TransicionesReservaTests.AsegurarPermitida_DesdeTerminal_RechazaCualquierDestino(Completada, Cancelada) | La salida del estado terminal debe rechazarse |
+| practica-3-defecto-3 | Eliminar únicamente e.Activo de CumpleCondicionesConfirmacionAsync durante la confirmación | ReservaServiceTests.Confirmar_CondicionIncumplida_RechazaSinCambiarEstado("inactivo") | Espacio inactivo no se confirma y conserva Pendiente; las demás condiciones no se eliminaron |
 | practica-3-defecto-4 | Retirar únicamente consulta de permiso en CrearAsync | ReservasAutorizacionTests.Crear_SolicitudPendienteRechazaYTrasAprobacionRealPermite | Antes de aprobar rechaza sin crear; tras aprobación real permite al mismo Estándar |
 
-Cada commit defecto debe ser hijo directo del mismo commit practica-3, tocar solo
-producción, nunca pruebas, y su mensaje indicar archivo y línea exacta cambiada.
-Sobre practica-3 pasa toda la suite; sobre cada defecto falla al menos una prueba,
-y el defecto 4 debe fallar en integración. Los cuatro defectos no forman una cadena.
-No se han creado commits ni etiquetas durante la preparación por fases.
+Cada commit defecto es hijo directo del mismo commit practica-3, modifica solo
+producción, nunca pruebas, y su mensaje indica archivo y línea exacta cambiada.
+Sobre practica-3 pasa toda la suite; los defectos 1 y 2 producen 134 aprobadas y
+4 fallidas cada uno, el defecto 3 produce 137 aprobadas y 1 fallida, y el defecto 4
+produce 136 aprobadas y 2 fallidas, incluida la integración real indicada arriba.
+Los cuatro defectos son independientes, no forman una cadena. La etiqueta base
+permanece en be2080d49a0f855112fe9849231e1927f5422966; este README actualizado se
+mantiene en un commit documental posterior de main y no cambia el contenido etiquetado.
 Las etiquetas históricas practica-1/practica-2 y defectos P2 no prueban mutantes P3.
 
 ## Límites y entrega
 
-- Recepción de correo pendiente: HTTP se probó con tokens extraídos de cola.
+- Flujos funcionales de activación y recuperación comprobados por HTTP con tokens
+  extraídos de cola; recepción real de correo mediante SMTP pendiente de evidencia.
 - Finalización automática y concurrencia simultánea SQL pendientes; seis
   funcionalidades públicas separables sí están implementadas y verificadas.
 - Avisos NU1510 y NU1902/NU1903 (System.Security.Cryptography.Pkcs 9.0.11 en pruebas).
-- Antes de etiquetar, incluir en Git archivos nuevos de producción, migración,
-  pruebas y documentación que aún aparecen con ??; no versionar bin/obj, tokens,
-  contraseñas, entorno ni secretos SMTP.
+- Los archivos necesarios de producción, migración, pruebas y documentación ya
+  están versionados en la base. No versionar bin/obj, tokens, contraseñas, entorno
+  ni secretos SMTP. Publicar main y las cinco etiquetas sigue pendiente.
 - Notificaciones/reportes de Reservas: semana 10. Adjuntos: opcionales; no implementados.
