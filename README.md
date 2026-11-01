@@ -9,9 +9,10 @@ distinguen de las instrucciones para ejecutar la versión actual.
 Estado: 138 pruebas aprobadas desde un clon local limpio y 73 verificaciones HTTP/SQL
 históricas. Las cinco etiquetas anotadas practica-3 y practica-3-defecto-1 a 4
 están publicadas en GitHub; los cuatro defectos fueron creados y detectados por la suite.
-La publicación se contrastó mediante git ls-remote origin: main remoto apunta a
-61f1311bb5e91ae79d79a0b7639ee37279de4375 y practica-3 a
-be2080d49a0f855112fe9849231e1927f5422966. La recepción SMTP local y los
+La última comprobación mediante git ls-remote origin confirmó la base publicada
+be2080d49a0f855112fe9849231e1927f5422966. La corrección documental y la
+reconstrucción de mutantes descritas más abajo están preparadas solo localmente;
+las etiquetas publicadas todavía no se han sustituido. La recepción SMTP local y los
 flujos de activación y recuperación fueron comprobados mediante mensajes realmente
 recibidos en Mailpit: 30 verificaciones aprobadas. No se comprobó entrega a buzones externos.
 El cierre de Práctica 3 se encuentra más abajo. La [auditoría de fase 7](docs/auditoria-practica-3.md)
@@ -467,7 +468,7 @@ limpio confirmó 138/138 pruebas en practica-3 y fallos pertinentes en cada muta
 | --- | --- | --- | --- |
 | practica-3-defecto-1 | Permitir Cancelada → Confirmada | TransicionesReservaTests.AsegurarPermitida_ProhibidaDocumentada_RechazaSinCambiarReserva(Cancelada, Confirmada) | Rechazo y estado intacto |
 | practica-3-defecto-2 | Permitir Completada → Cancelada, salida de un terminal | TransicionesReservaTests.AsegurarPermitida_DesdeTerminal_RechazaCualquierDestino(Completada, Cancelada) | La salida del estado terminal debe rechazarse |
-| practica-3-defecto-3 | Eliminar únicamente e.Activo de CumpleCondicionesConfirmacionAsync durante la confirmación | ReservaServiceTests.Confirmar_CondicionIncumplida_RechazaSinCambiarEstado("inactivo") | Espacio inactivo no se confirma y conserva Pendiente; las demás condiciones no se eliminaron |
+| practica-3-defecto-3 | Eliminar únicamente && e.Activo de CumpleCondicionesConfirmacionAsync durante la confirmación | ReservaServiceTests.Confirmar_CondicionIncumplida_RechazaSinCambiarEstado("inactivo") | Espacio inactivo no se confirma y conserva Pendiente; las demás condiciones no se eliminaron |
 | practica-3-defecto-4 | Retirar únicamente consulta de permiso en CrearAsync | ReservasAutorizacionTests.Crear_SolicitudPendienteRechazaYTrasAprobacionRealPermite | Antes de aprobar rechaza sin crear; tras aprobación real permite al mismo Estándar |
 
 Cada commit defecto es hijo directo del mismo commit practica-3, modifica solo
@@ -475,17 +476,25 @@ producción, nunca pruebas, y su mensaje indica archivo y línea exacta cambiada
 Sobre practica-3 pasa toda la suite; los defectos 1 y 2 producen 134 aprobadas y
 4 fallidas cada uno, el defecto 3 produce 137 aprobadas y 1 fallida, y el defecto 4
 produce 136 aprobadas y 2 fallidas, incluida la integración real indicada arriba.
-Los cuatro defectos son independientes, no forman una cadena. La etiqueta base
-permanece en be2080d49a0f855112fe9849231e1927f5422966; este README actualizado se
-mantiene en un commit documental posterior de main y no cambia el contenido etiquetado.
+Los cuatro defectos son independientes, no forman una cadena. La base publicada
+permanece en be2080d49a0f855112fe9849231e1927f5422966 hasta aprobar la actualización.
+El nuevo candidato documental es 5811357e61837924776048db848bd6a95641e00f;
+solo modifica README.md y los cuatro mutantes reconstruidos son hijos directos suyos.
 Las etiquetas históricas practica-1/practica-2 y defectos P2 no prueban mutantes P3.
 
 ## Cierre de evidencia posterior a practica-3
 
 La base evaluable es `practica-3`, commit
-`be2080d49a0f855112fe9849231e1927f5422966`. Su README refleja el estado documental
-anterior a crear y verificar las etiquetas y a demostrar SMTP. Este cierre está
-en un commit posterior de `main`: no mueve etiquetas ni cambia el código evaluable.
+`be2080d49a0f855112fe9849231e1927f5422966`. Su README original refleja un estado
+documental anterior. Se preparó una corrección exclusivamente documental en
+`codex/correccion-base-practica-3`, commit
+`5811357e61837924776048db848bd6a95641e00f`, y cuatro ramas
+`codex/correccion-defecto-1` a `codex/correccion-defecto-4` con las mutaciones originales.
+La base corregida pasó 138/138; los mutantes produjeron respectivamente 4, 4, 1 y 2
+fallos pertinentes, incluida la integración del defecto 4. No se han movido las
+etiquetas originales ni actualizado las referencias remotas: se requiere aprobación
+expresa antes de publicarlas. Los respaldos locales backup/pre-correccion-practica-3
+y backup/pre-correccion-defecto-1 a 4 conservan los commits originales.
 Las guías de fases anteriores se conservan como registros históricos; las
 afirmaciones de correo pendiente describen su estado en aquellas fases.
 
@@ -526,11 +535,19 @@ dotnet test SISReservasEspacios.slnx
 ```
 
 Esperado: cinco etiquetas de tipo `tag`, HEAD en la base indicada y 138/138 pruebas.
+Mientras esté pendiente la publicación de la corrección, la base indicada sigue
+siendo be2080d; una vez aprobada y publicada, será el candidato 5811357 indicado arriba.
 Para cada mutante, en un clon limpio cambiar a su etiqueta y ejecutar el mismo
 comando de pruebas: debe producir los fallos pertinentes de la tabla. Comprobar
 el padre directo con `git log -1 --format="%H %P" practica-3-defecto-1` (repetir
 para 2, 3 y 4): siempre debe ser el commit base. Todos modifican solo producción;
 sus mensajes identifican archivo y línea. Los cuatro son independientes.
+
+En el simulacro posterior la base pasó 138/138 en nueve ejecuciones, pero durante
+dos ejecuciones de mutantes apareció un fallo adicional intermitente en
+ConfiguracionCorreoTests.Dispatcher_Deshabilitado_NoResuelveServiciosNiTocaBaseDeDatos.
+No se ha corregido ni se afirma resuelto. En la validación de los candidatos
+documentales no apareció ese fallo; esto no garantiza que haya desaparecido.
 
 ## Práctica 2: defectos históricos de Gestión de permisos
 
