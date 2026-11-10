@@ -60,7 +60,252 @@ La [máquina de estados](docs/maquina-de-estados.md) documenta Reservas y su
 cobertura por fila. Las guías de fases 4, 6 y 7 reflejan el momento de su auditoría;
 para resultados posteriores consultar el cierre de evidencia de esta guía.
 
-## Requisitos previos
+## Contenedor
+
+La validación final en Docker Desktop pasó 114 comprobaciones en una copia de trabajo aislada. Incluyó el reinicio sin borrar volúmenes y la comparación del documento descargado con el original. La entrega se inicia con los comandos siguientes.
+
+Desde la raíz de un clon limpio, con Docker y Compose en modo de contenedores
+Linux y un equipo compatible con la imagen de SQL Server, ejecutar:
+
+```powershell
+Copy-Item .env.example .env
+docker compose up --build
+```
+
+En Bash, copiar el archivo con `cp .env.example .env`. El ejemplo incluye una
+contraseña pública de demostración para el entorno local. Conserva el `.env`
+de esa instalación cuando vuelvas a levantar el mismo volumen SQL.
+
+Con el puerto de ejemplo, acceder a Swagger en `http://localhost:5054/swagger`.
+Si cambias `APP_PORT`, usa el nuevo puerto en esa dirección. Compose publica
+solo la API en loopback. SQL Server queda en la red interna, y la API espera
+una consulta exitosa a SQL antes de aplicar las migraciones y atender peticiones.
+La ejecución local descrita más abajo sigue usando su configuración habitual.
+
+Para verificar el arranque, ejecutar `docker compose ps` desde otra terminal.
+SQL Server debe aparecer como `healthy` y Swagger debe responder en la dirección
+indicada. El despacho SMTP se habilita con la configuración de correo siguiente.
+
+Detener con `Ctrl+C` y ejecutar `docker compose down` para retirar los
+contenedores. Los volúmenes `sql-data` y `documentos-data` se conservan.
+Para volver a levantar los servicios, ejecutar `docker compose up` desde la
+misma carpeta. Los archivos subidos se guardan en `documentos-data`, montado
+en `/app/data/documentos`.
+
+### Correo en Docker con Mailpit
+
+Para la evaluación local, configura estas variables en el `.env` de la raíz.
+Conserva los valores de SQL Server y del puerto de tu instalación.
+
+```dotenv
+EmailDispatcher__Enabled=true
+SMTP_HOST=mailpit
+SMTP_PORT=1025
+SMTP_FROM=reservas@test.invalid
+SMTP_ENABLE_SSL=false
+SMTP_USE_AUTH=false
+SMTP_USERNAME=
+SMTP_PASSWORD=
+```
+
+```powershell
+docker compose up -d --build
+docker compose logs --tail=50 api
+```
+
+Mailpit arranca también con el comando principal, recibe SMTP dentro de la red
+Compose y no tiene reenvío configurado. No requiere activar un perfil adicional.
+Al habilitar el despachador se procesan también los correos pendientes del
+catálogo conectado. Usa esta captura solo en un entorno local autorizado.
+La API sigue siendo el único servicio con un puerto publicado.
+
+Consulta el buzón desde una terminal privada con el contenedor auxiliar.
+El comando de listado muestra el identificador y el destinatario. Sustituye
+`ID` en el segundo comando por el identificador del mensaje que necesitas.
+Su respuesta contiene el texto con el enlace o código de un solo uso.
+
+```powershell
+docker compose run --rm --no-deps mail-inspector -fsS http://mailpit:8025/api/v1/messages
+docker compose run --rm --no-deps mail-inspector -fsS http://mailpit:8025/api/v1/message/ID
+```
+
+Mantén la salida del mensaje fuera de capturas públicas, logs compartidos y Git.
+El log `SMTP aceptó el correo` indica aceptación por SMTP. El mensaje observado
+en el buzón confirma la recepción local.
+
+1. **Activación.** En Swagger, registra una cuenta ficticia con
+   `POST /api/auth/register`. Espera el siguiente ciclo del despachador,
+   consulta el mensaje nuevo y abre su enlace desde el anfitrión.
+   Si la cuenta ya existía y seguía inactiva, usa
+   `POST /api/auth/resend-activation` con el correo como string JSON.
+2. **Recuperación.** Para una cuenta existente, envía
+   `POST /api/passwords/recovery` con `{"email":"correo-de-la-cuenta"}`.
+   Usa la dirección de la cuenta. Busca el mensaje nuevo y usa
+   su código en `POST /api/passwords/reset` con los campos `token` y
+   `nuevaPassword`. El código dura 30 minutos y es de un solo uso.
+   Inicia sesión con la nueva contraseña. Si la cuenta aún está inactiva,
+   completa también la activación.
+
+Para un proveedor externo, sustituye host, puerto y remitente, habilita
+`SMTP_ENABLE_SSL` para STARTTLS y usa `SMTP_USE_AUTH=true` con usuario y
+contraseña privados en el `.env` ignorado. Conserva una sola instancia del
+despachador para la misma cola.
+
+## Desarrollo local: Visual Studio, Docker y SQL Server
+
+| Modo | Instancia y base | Autenticación SQL |
+| --- | --- | --- |
+| Visual Studio, perfil `http` | `(localdb)\MSSQLLocalDB`, base `SISReservasEspacios` | Windows |
+| Docker Compose | `sqlserver,1433`, base `SISReservasEspacios` | SQL Server |
+
+Son catálogos independientes. Usuarios, sesiones y correos pertenecen a la
+instancia en la que se crearon. Con el perfil `http` y sin overrides,
+Visual Studio usa `appsettings.json`. En desarrollo, la configuración de
+`appsettings.Development.json` y User Secrets puede reemplazar ese archivo.
+`ConnectionStrings__DefaultConnection` prevalece sobre esos valores, y un
+argumento de línea de comandos puede prevalecer sobre el entorno. Compose
+inyecta su propia cadena en el contenedor. El archivo `.env` de Compose
+no cambia por sí solo la conexión del perfil `http`.
+
+Para ejecutar desde Visual Studio 2022, abre `SISReservasEspacios.slnx`,
+selecciona `SISReservas.Api` como proyecto de inicio y elige el perfil
+`http`. Pulsa F5 y abre `http://localhost:5054/swagger`. Si Compose ya
+ocupa ese puerto, detén su API o usa un puerto distinto. El perfil local
+requiere un catálogo actualizado. Para una instalación nueva usa la sección
+«Clon limpio y base nueva». Si quieres actualizar una base local existente,
+respalda sus datos y confirma el destino antes de aplicar migraciones.
+
+Para ejecutar Docker sin abrir el puerto SQL, conserva el `.env` de tu
+instalación y ejecuta `docker compose up -d --build`. Si vas a probar correo
+local, revisa la sección «Correo en Docker con Mailpit»; ya está incluido.
+
+### Consultar SQL Server Docker desde Visual Studio
+
+Desde la misma carpeta y usando el mismo proyecto Compose, ejecuta:
+
+```powershell
+docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --build
+docker compose -f docker-compose.yml -f docker-compose.dev.yml ps
+```
+
+El archivo adicional publica SQL solo en `127.0.0.1:14333`. En Visual Studio
+abre **Ver → Explorador de objetos de SQL Server → Agregar SQL Server**.
+Indica `127.0.0.1,14333` como servidor, elige **Autenticación de SQL Server**,
+usa el usuario `sa` y la contraseña de la instancia existente. Si la instancia
+se creó con el `.env` actual, es el valor de `MSSQL_SA_PASSWORD`. Con el
+certificado local de demostración, marca **Confiar en el certificado del servidor**
+en las opciones de conexión. Expande **Bases de datos → SISReservasEspacios → Tablas**.
+Para LocalDB, agrega `(localdb)\MSSQLLocalDB` con autenticación de Windows.
+
+Ejecuta la misma consulta en cada instancia. Sustituye el correo de ejemplo por
+el de la cuenta buscada:
+
+```sql
+USE [SISReservasEspacios];
+DECLARE @correo nvarchar(320) = N'cuenta@test.invalid';
+SELECT @@SERVERNAME AS Servidor, DB_NAME() AS Base;
+SELECT Activo, IntentosFallidos, BloqueadoHasta
+FROM dbo.Usuarios WHERE Email = @correo;
+SELECT Estado, CreadoEn, EnviadoEn
+FROM dbo.CorreosEnCola WHERE Destinatario = @correo ORDER BY CreadoEn DESC;
+SELECT MigrationId FROM dbo.__EFMigrationsHistory ORDER BY MigrationId;
+```
+
+La cola pertenece a SQL Server. `Pendiente` incluye mensajes aún no intentados
+y mensajes que serán reintentados tras un fallo. `Enviado` indica que SMTP
+aceptó el mensaje. Mailpit muestra las entregas que él capturó y su buzón de
+demostración puede quedar vacío si se recrea su contenedor. Un mensaje viejo
+de activación en Mailpit no confirma que una recuperación reciente se haya
+generado. El endpoint de recuperación responde igual si la cuenta no existe
+en el catálogo de la API. En ese caso, registra y activa una cuenta de prueba
+en Docker o recupera la cuenta usando la API conectada a LocalDB.
+
+Antes de solicitar activación o recuperación de prueba, confirma en el
+`.env` que `SMTP_HOST=mailpit`, `SMTP_PORT=1025` y que el perfil de correo
+está activo. Usa el buzón interno para obtener el enlace o código según la
+guía anterior.
+
+Para retirar el puerto SQL de desarrollo, vuelve a ejecutar la composición
+principal con el mismo proyecto. Compose recreará el servicio SQL si cambia
+su publicación de puertos y reutilizará su volumen:
+
+```powershell
+docker compose up -d
+```
+
+`docker compose stop` pausa los servicios. `docker compose down` retira
+contenedores y conserva los volúmenes con nombre. Mantén el mismo proyecto
+Compose, los mismos volúmenes y las credenciales de la instancia al volver a
+levantar. Evita `docker compose down -v`, que elimina los volúmenes.
+
+## Documentos
+
+Usa un token de sesión en Swagger o en el encabezado `Authorization: Bearer …`.
+En la ejecución local, los archivos se guardan en `App_Data/documentos` bajo
+la raíz de contenido de la API. Puedes cambiarlo con `Documentos__Directorio`.
+En Compose, la variable apunta al volumen `documentos-data`. La migración
+`AgregarDocumentos` crea la tabla de metadatos.
+
+| Operación | Petición | Resultado |
+| --- | --- | --- |
+| Subir | POST `/api/documentos`, multipart con campo `archivo` | 201 con metadatos. Se aceptan archivos no vacíos de hasta 10 MiB. |
+| Listar | GET `/api/documentos` | 200. Estándar ve los propios y Administrador ve todos los vigentes. |
+| Descargar | GET `/api/documentos/{id}/descargar` | 200 como adjunto para el dueño o Administrador. |
+| Eliminar | DELETE `/api/documentos/{id}` | 204 para el dueño o Administrador. Conserva el registro y el archivo. |
+
+Para comprobar autorización, sube un archivo con una cuenta y prueba la
+descarga y eliminación con otra cuenta Estándar. Ambas devuelven 404, igual
+que para un identificador inexistente o un documento eliminado. Luego elimina
+con la cuenta dueña y comprueba que desaparece del listado y ya no se descarga.
+Para probar persistencia, usa otro archivo vigente, ejecuta `docker compose down`
+y vuelve a levantar con `docker compose up`. Inicia sesión, lista y descarga ese
+mismo archivo.
+
+## API externa
+
+La operación autenticada
+`GET /api/reservas/espacios/{id}/planificacion-exterior?inicio=...&fin=...`
+combina disponibilidad real de una cancha con el pronóstico horario de
+[WeatherAPI.com](https://www.weatherapi.com/docs/). Para usarla, el operador
+selecciona una cancha que vaya a utilizarse al aire libre. El modelo todavía
+no clasifica las canchas por cubierta. Se usa una ubicación de recinto
+configurada mediante `WEATHER_LOCATION`; el ejemplo apunta a Santo Domingo
+y debe ajustarse al recinto evaluado.
+
+La clave se lee exclusivamente de `WEATHER_API_KEY` en el entorno del proceso.
+Crea una clave en tu cuenta de WeatherAPI.com y guárdala en `WEATHER_API_KEY` dentro del `.env` local. La configuración de ejemplo
+deja la clave vacía y permite demostrar el rechazo controlado HTTP 503.
+Una clave inválida, error HTTP, respuesta malformada o timeout también producen
+un mensaje controlado. El cliente suprime el registro de URLs del proveedor,
+porque su autenticación coloca la clave en la query.
+
+Después de cambiar `WEATHER_API_KEY` en `.env`, recrea el contenedor de la API
+para que reciba el nuevo valor:
+
+```powershell
+docker compose up -d --force-recreate api
+```
+
+La planificación primero aplica las reglas de sesión, espacio, fechas y
+disponibilidad de Reservas. Si hay solapamiento, recomienda otro horario.
+Si está libre, consulta el pronóstico de tres días y exige cobertura de todo
+el intervalo. Recomienda usar la cancha cuando todas las horas tienen
+probabilidad de lluvia inferior al 60 % y viento inferior a 40 km/h.
+Estos umbrales son criterios académicos de demostración.
+
+Ejemplo de respuesta comprobado con proveedor HTTP simulado:
+
+```json
+{"espacioId":1,"disponible":true,"recomendado":true,"motivo":"Cancha disponible y condiciones favorables."}
+```
+
+La integración se probó exitosamente con una clave real mediante el endpoint de
+planificación exterior ejecutado en Docker. Esta comprobación funcional se realizó
+contra WeatherAPI. El ejemplo anterior corresponde al proveedor simulado.
+Las pruebas automatizadas con proveedor simulado cubren respuesta favorable, lluvia, ausencia de clave,
+clave rechazada, timeout y JSON sin datos requeridos.
+
+## Requisitos previos para ejecución local sin Docker
 
 - .NET SDK 10.0 (verificado: 10.0.303), acceso a NuGet para restaurar.
 - EF Core SQL Server/Design y CLI dotnet-ef 10.0.12.
@@ -99,7 +344,7 @@ dotnet ef database update --project backend/SISReservas.Api/SISReservas.Api.cspr
 sqlcmd -S '(localdb)\MSSQLLocalDB' -E -d $evaluacionDb -Q 'SELECT MigrationId FROM __EFMigrationsHistory ORDER BY MigrationId;' -b
 ```
 
-Esperado: cuatro migraciones, terminando en 20261101193103_AgregarEspaciosYReservas.
+Esperado: cinco migraciones, terminando en 20261109203709_AgregarDocumentos.
 La nueva migración crea Espacios y Reservas sin alterar tablas anteriores.
 La migración de Gestión de permisos es 20261019220956_AgregarGestionPermisos.
 El valor predeterminado de conexión está en backend/SISReservas.Api/appsettings.json
@@ -118,8 +363,11 @@ dotnet test SISReservasEspacios.slnx
 ```
 
 Restaura y compila automáticamente. No requiere API, SQL ni SMTP. Usa servicios
-reales sobre EF InMemory con bases independientes. Resultado actual: 138 aprobadas,
-0 fallidas, 0 omitidas. No sustituye persistencia SQL ni recepción de correo.
+reales sobre EF InMemory con bases independientes. La última ejecución comprobada
+registró 159 aprobadas, 0 fallidas y 0 omitidas. La última compilación comprobada
+terminó con 0 errores y 0 advertencias. Estos resultados corresponden a la
+validación anterior; no se repitieron durante esta actualización documental.
+No sustituye persistencia SQL ni recepción de correo.
 
 ## Variables de entorno y correo
 
@@ -187,16 +435,19 @@ de la cola para preparar cuentas sin SMTP, declararlo: no acredita activación p
 
 ### Preparación del primer Administrador
 
-No hay endpoint público de promoción inicial. Registrar y activar la cuenta y,
-solo en el catálogo nuevo, promoverla antes del login. Sustituir el correo por el
-real de esa cuenta de evaluación:
+Registrar y activar primero la cuenta mediante el correo recibido. El operador
+con acceso a Docker puede preparar el primer Administrador con el comando local
+siguiente. Sustituir el correo por el de esa cuenta activada:
 
 ```powershell
-sqlcmd -S '(localdb)\MSSQLLocalDB' -E -d $evaluacionDb -Q "UPDATE Usuarios SET Rol='Administrador' WHERE Email='admin@evaluacion.test.invalid'; SELECT Email,Rol,Activo FROM Usuarios;" -b
+docker compose exec -T api dotnet SISReservas.Api.dll --administrador-inicial admin@evaluacion.test.invalid
 ```
 
-Ese correo es un identificador de ejemplo, no un buzón externo. No usarlo sin
-sustituir si se evalúa correo externo. Confirmar rol mediante GET `/api/auth/me`.
+El comando exige una cuenta existente y activada, y rechaza la operación si ya
+hay un Administrador. Revoca las sesiones anteriores de esa cuenta. Si no hay
+espacios, prepara una cancha de evaluación. Iniciar sesión de nuevo y confirmar
+el rol mediante GET `/api/auth/me`. El script automatizado ejecuta este paso
+únicamente en su entorno nuevo después de la activación por SMTP.
 
 ### Login, logout y rechazo administrativo
 
@@ -265,8 +516,9 @@ como una nueva ejecución de todos los casos en esta restauración documental.
 | Código inválido/usado/expirado | Reset con código alterado, repetido o después de 30 minutos | 400 |
 | Nueva contraseña inválida | Reset con contraseña que incumple longitud/letras/números | 400 |
 
-En recuperación usar exactamente el email guardado, en minúsculas, sin espacios:
-RequestRecoveryAsync no aplica la normalización que sí usa registro/login.
+En recuperación, la búsqueda del usuario normaliza el correo a minúsculas y
+recorta espacios, igual que registro e inicio de sesión. Envía una dirección
+válida en el cuerpo HTTP.
 La prueba de expiración requiere esperar la vigencia; no asumir que esté cubierta
 por haber comprobado únicamente la reutilización.
 
@@ -631,7 +883,6 @@ SISReservasEspacios/
   tokens de cola y no sustituye la evidencia SMTP posterior descrita arriba.
 - Finalización automática y concurrencia simultánea SQL pendientes; seis
   funcionalidades públicas separables sí están implementadas y verificadas.
-- Avisos NU1510 y NU1902/NU1903 (System.Security.Cryptography.Pkcs 9.0.11 en pruebas).
 - Los archivos necesarios de producción, migración, pruebas y documentación ya
   están versionados en la base. No versionar bin/obj, tokens, contraseñas, entorno
   ni secretos SMTP. main y las cinco etiquetas de Práctica 3 ya fueron publicados;

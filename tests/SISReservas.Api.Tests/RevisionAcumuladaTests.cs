@@ -1,8 +1,12 @@
+using System.Net;
+using System.Net.Sockets;
+using System.Text;
 using System.Reflection;
 using System.Text.RegularExpressions;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Logging.Abstractions;
 using SISReservas.Api.Controllers;
 using SISReservas.Api.DTOs.Auth;
 using SISReservas.Api.Models.Enums;
@@ -98,6 +102,92 @@ public class RevisionAcumuladaTests
         Assert.False(e.Passwords.VerifyPassword(usuario, usuario.PasswordHash, "Anterior123"));
         Assert.Null(await e.Sesiones.GetValidSessionAsync(sesion.RawToken));
         Assert.False(await e.Recuperacion.ResetPasswordAsync(token, "OtraClave789"));
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Cola_EntregaActivacionORecuperacionPorSmtp(bool recuperacion)
+    {
+        using var e = new Escenario();
+        const string correo = "entrega@test.invalid";
+        await e.Auth.RegisterAsync(new RegisterRequest
+        {
+            Nombre = "Prueba SMTP", Email = correo, Password = "Prueba1234"
+        });
+        if (recuperacion)
+        {
+            // Aislar el mensaje de recuperación en la base InMemory de esta prueba.
+            var activacion = await e.Db.CorreosEnCola.SingleAsync();
+            e.Db.CorreosEnCola.Remove(activacion);
+            await e.Db.SaveChangesAsync();
+            await e.Recuperacion.RequestRecoveryAsync("  " + correo.ToUpperInvariant() + "  ");
+        }
+        var mensaje = await e.Db.CorreosEnCola.SingleAsync();
+        Assert.Equal(EstadoCorreo.Pendiente, mensaje.Estado);
+
+        using var tiempo = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+        using var servidor = new TcpListener(IPAddress.Loopback, 0);
+        servidor.Start();
+        var puerto = ((IPEndPoint)servidor.LocalEndpoint).Port;
+        var config = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
+        {
+            ["SMTP_HOST"] = "127.0.0.1",
+            ["SMTP_PORT"] = puerto.ToString(System.Globalization.CultureInfo.InvariantCulture),
+            ["SMTP_FROM"] = "reservas@test.invalid",
+            ["SMTP_ENABLE_SSL"] = "false",
+            ["SMTP_USE_AUTH"] = "false"
+        }).Build();
+        var remitente = new EmailSenderService(e.Db, config, NullLogger<EmailSenderService>.Instance);
+
+        var recepcion = RecibirSmtpAsync(servidor, tiempo.Token);
+        await Task.WhenAll(remitente.SendPendingAsync(tiempo.Token), recepcion);
+
+        var captura = await recepcion;
+        Assert.True(captura.Contains("RCPT TO:<entrega@test.invalid>", StringComparison.OrdinalIgnoreCase));
+        var separador = captura.IndexOf("\n\n", StringComparison.Ordinal);
+        Assert.True(separador >= 0);
+        var cuerpo = captura[(separador + 2)..];
+        if (captura[..separador].Contains("Content-Transfer-Encoding: base64", StringComparison.OrdinalIgnoreCase))
+            cuerpo = Encoding.UTF8.GetString(Convert.FromBase64String(cuerpo));
+        Assert.True(cuerpo.Contains(recuperacion ? "expira en 30 minutos" : "/api/auth/activate",
+            StringComparison.OrdinalIgnoreCase));
+        var procesado = await e.Database.CreateContext().CorreosEnCola.SingleAsync();
+        Assert.Equal(EstadoCorreo.Enviado, procesado.Estado);
+        Assert.NotNull(procesado.EnviadoEn);
+    }
+
+    private static async Task<string> RecibirSmtpAsync(TcpListener servidor, CancellationToken ct)
+    {
+        using var cliente = await servidor.AcceptTcpClientAsync(ct);
+        using var stream = cliente.GetStream();
+        using var lector = new StreamReader(stream);
+        using var escritor = new StreamWriter(stream, Encoding.ASCII) { NewLine = "\r\n", AutoFlush = true };
+        var captura = new StringBuilder();
+        await escritor.WriteLineAsync("220 SMTP de prueba");
+
+        while (await lector.ReadLineAsync(ct) is { } linea)
+        {
+            captura.Append(linea).Append('\n');
+            if (!linea.Equals("DATA", StringComparison.OrdinalIgnoreCase))
+            {
+                await escritor.WriteLineAsync("250 OK");
+                continue;
+            }
+
+            await escritor.WriteLineAsync("354 Enviar mensaje");
+            while (await lector.ReadLineAsync(ct) is { } dato)
+            {
+                if (dato == ".")
+                {
+                    await escritor.WriteLineAsync("250 Mensaje recibido");
+                    return captura.ToString();
+                }
+                captura.Append(dato).Append('\n');
+            }
+        }
+
+        throw new IOException("El cliente SMTP cerró la conexión antes de completar el mensaje.");
     }
 
     [Theory]

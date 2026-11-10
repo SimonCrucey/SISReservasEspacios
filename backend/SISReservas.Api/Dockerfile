@@ -2,19 +2,19 @@
 
 # This stage is used when running from VS in fast mode (Default for Debug configuration)
 FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS base
-USER $APP_UID
 WORKDIR /app
+RUN mkdir -p /app/data/documentos && chown "$APP_UID" /app/data/documentos
+USER $APP_UID
 EXPOSE 8080
-EXPOSE 8081
 
 
 # This stage is used to build the service project
 FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
 ARG BUILD_CONFIGURATION=Release
 WORKDIR /src
-COPY ["SISReservas.Api/SISReservas.Api.csproj", "SISReservas.Api/"]
+COPY ["backend/SISReservas.Api/SISReservas.Api.csproj", "SISReservas.Api/"]
 RUN dotnet restore "./SISReservas.Api/SISReservas.Api.csproj"
-COPY . .
+COPY backend/SISReservas.Api/ SISReservas.Api/
 WORKDIR "/src/SISReservas.Api"
 RUN dotnet build "./SISReservas.Api.csproj" -c $BUILD_CONFIGURATION -o /app/build
 

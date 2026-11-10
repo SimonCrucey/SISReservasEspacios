@@ -18,10 +18,22 @@ public class SISReservasDbContext : DbContext
     public DbSet<UsuarioPermiso> PermisosUsuario => Set<UsuarioPermiso>();
     public DbSet<Espacio> Espacios => Set<Espacio>();
     public DbSet<Reserva> Reservas => Set<Reserva>();
+    public DbSet<Documento> Documentos => Set<Documento>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
+
+        modelBuilder.Entity<Documento>(entity =>
+        {
+            entity.Property(d => d.NombreOriginal).HasMaxLength(255);
+            entity.Property(d => d.NombreInterno).HasMaxLength(32);
+            entity.Property(d => d.Mime).HasMaxLength(127);
+            entity.HasIndex(d => d.NombreInterno).IsUnique();
+            entity.HasIndex(d => new { d.UsuarioId, d.EliminadoEn });
+            entity.HasOne<Usuario>().WithMany().HasForeignKey(d => d.UsuarioId)
+                .OnDelete(DeleteBehavior.Restrict);
+        });
 
         modelBuilder.Entity<Espacio>(entity =>
         {

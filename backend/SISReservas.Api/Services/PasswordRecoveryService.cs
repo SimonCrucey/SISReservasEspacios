@@ -34,6 +34,7 @@ public class PasswordRecoveryService
 
     public async Task RequestRecoveryAsync(string email)
     {
+        email = email.Trim().ToLowerInvariant();
         var usuario = await _db.Usuarios
             .FirstOrDefaultAsync(u => u.Email == email);
 

@@ -63,6 +63,49 @@ namespace SISReservas.Api.Migrations
                     b.ToTable("CorreosEnCola");
                 });
 
+            modelBuilder.Entity("SISReservas.Api.Models.Documento", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTimeOffset?>("EliminadoEn")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<string>("Mime")
+                        .IsRequired()
+                        .HasMaxLength(127)
+                        .HasColumnType("nvarchar(127)");
+
+                    b.Property<string>("NombreInterno")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("nvarchar(32)");
+
+                    b.Property<string>("NombreOriginal")
+                        .IsRequired()
+                        .HasMaxLength(255)
+                        .HasColumnType("nvarchar(255)");
+
+                    b.Property<DateTimeOffset>("SubidoEn")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<long>("Tamano")
+                        .HasColumnType("bigint");
+
+                    b.Property<Guid>("UsuarioId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("NombreInterno")
+                        .IsUnique();
+
+                    b.HasIndex("UsuarioId", "EliminadoEn");
+
+                    b.ToTable("Documentos");
+                });
+
             modelBuilder.Entity("SISReservas.Api.Models.Espacio", b =>
                 {
                     b.Property<int>("Id")
@@ -338,6 +381,15 @@ namespace SISReservas.Api.Migrations
                         .IsRequired();
 
                     b.Navigation("Usuario");
+                });
+
+            modelBuilder.Entity("SISReservas.Api.Models.Documento", b =>
+                {
+                    b.HasOne("SISReservas.Api.Models.Usuario", null)
+                        .WithMany()
+                        .HasForeignKey("UsuarioId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("SISReservas.Api.Models.Reserva", b =>

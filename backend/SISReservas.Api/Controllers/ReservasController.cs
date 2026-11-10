@@ -23,6 +23,11 @@ public class ReservasController(ReservaService reservas) : ControllerBase
     public Task<IActionResult> Crear([FromBody] CrearReservaDto request) =>
         Ejecutar(id => reservas.CrearAsync(id, request), StatusCodes.Status201Created);
 
+    [HttpGet("espacios/{espacioId:int}/planificacion-exterior")]
+    public Task<IActionResult> Planificacion(int espacioId, [FromQuery] DateTime inicio, [FromQuery] DateTime fin,
+        [FromServices] PlanificacionService planificacion, CancellationToken ct) =>
+        Ejecutar(id => planificacion.EvaluarAsync(id, espacioId, inicio, fin, ct));
+
     [HttpGet("mine")]
     public Task<IActionResult> ObtenerMias() => Ejecutar(reservas.ObtenerMiasAsync);
 

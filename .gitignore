@@ -31,9 +31,10 @@ dist/
 
 ## Environment variables & secrets
 .env
-.env.local
-.env.*.local
+.env.*
+!.env.example
 appsettings.Development.json
+/backend/SISReservas.Api/App_Data/panel/
 appsettings.Production.json
 
 ## Operating System files
@@ -41,3 +42,6 @@ appsettings.Production.json
 Thumbs.db
 
 *.suo [Dd]ebug/ [Rr]elease/ x64/ x86/ .idea/
+
+# Validador interno de Práctica 4
+/scripts/Validar-Practica4.ps1

@@ -1,0 +1,4 @@
+services:
+  sqlserver:
+    ports:
+      - '127.0.0.1:14333:1433'

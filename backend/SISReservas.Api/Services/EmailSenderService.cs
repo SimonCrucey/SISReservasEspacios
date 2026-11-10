@@ -6,29 +6,23 @@ using SISReservas.Api.Models.Enums;
 
 namespace SISReservas.Api.Services;
 
-public class EmailSenderService
+public class EmailSenderService(
+    SISReservasDbContext db, IConfiguration configuration, ILogger<EmailSenderService> logger)
 {
-    private readonly SISReservasDbContext _db;
-
-    public EmailSenderService(SISReservasDbContext db)
+    public async Task SendPendingAsync(CancellationToken cancellationToken = default)
     {
-        _db = db;
-    }
-
-    public async Task SendPendingAsync()
-    {
-        var host = Environment.GetEnvironmentVariable("SMTP_HOST");
-        var portText = Environment.GetEnvironmentVariable("SMTP_PORT");
-        var username = Environment.GetEnvironmentVariable("SMTP_USERNAME");
-        var password = Environment.GetEnvironmentVariable("SMTP_PASSWORD");
-        var from = Environment.GetEnvironmentVariable("SMTP_FROM");
-        var sslText = Environment.GetEnvironmentVariable("SMTP_ENABLE_SSL");
-        var useAuthText = Environment.GetEnvironmentVariable("SMTP_USE_AUTH") ?? "true";
+        var host = configuration["SMTP_HOST"];
+        var portText = configuration["SMTP_PORT"];
+        var username = configuration["SMTP_USERNAME"];
+        var password = configuration["SMTP_PASSWORD"];
+        var from = configuration["SMTP_FROM"];
+        var sslText = configuration["SMTP_ENABLE_SSL"];
+        var useAuthText = configuration["SMTP_USE_AUTH"] ?? "true";
 
         if (string.IsNullOrWhiteSpace(host) ||
             !int.TryParse(portText, out var port) ||
             port < 1 || port > 65535 ||
-            string.IsNullOrWhiteSpace(from) ||
+            !MailAddress.TryCreate(from, out var remitente) ||
             !bool.TryParse(sslText, out var enableSsl) ||
             !bool.TryParse(useAuthText, out var useAuth) ||
             (useAuth && (string.IsNullOrWhiteSpace(username) || string.IsNullOrWhiteSpace(password))))
@@ -39,52 +33,56 @@ public class EmailSenderService
                 "como variables de entorno.");
         }
 
-        var pendientes = await _db.CorreosEnCola
+        var pendientes = await db.CorreosEnCola
             .Where(c => c.Estado == EstadoCorreo.Pendiente)
             .OrderBy(c => c.CreadoEn)
-            .ToListAsync();
-
-        if (pendientes.Count == 0)
-        {
-            Console.WriteLine("No hay correos pendientes.");
-            return;
-        }
+            .ToListAsync(cancellationToken);
 
         using var smtp = new SmtpClient(host, port)
         {
             EnableSsl = enableSsl,
             UseDefaultCredentials = false,
             Credentials = useAuth ? new NetworkCredential(username, password) : null,
-            DeliveryMethod = SmtpDeliveryMethod.Network,
-            Timeout = 20000
+            DeliveryMethod = SmtpDeliveryMethod.Network
         };
 
         foreach (var correo in pendientes)
         {
+            cancellationToken.ThrowIfCancellationRequested();
+            using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            timeout.CancelAfter(TimeSpan.FromSeconds(20));
             try
             {
-                using var mensaje = new MailMessage(
-                    from,
-                    correo.Destinatario,
-                    correo.Asunto,
-                    correo.Cuerpo);
-
-                await smtp.SendMailAsync(mensaje);
-
-                correo.Estado = EstadoCorreo.Enviado;
-                correo.EnviadoEn = DateTime.UtcNow;
-
-                await _db.SaveChangesAsync();
-
-                Console.WriteLine(
-                    $"Correo enviado: {correo.Id} -> {correo.Destinatario}");
+                using var mensaje = new MailMessage
+                {
+                    From = remitente,
+                    Subject = correo.Asunto,
+                    Body = correo.Cuerpo
+                };
+                mensaje.To.Add(correo.Destinatario);
+                await smtp.SendMailAsync(mensaje, timeout.Token);
             }
-            catch (Exception ex)
+            catch (SmtpException error)
             {
-                Console.Error.WriteLine(
-                    $"No se pudo enviar el correo {correo.Id}. " +
-                    $"Permanece pendiente. Error: {ex.Message}");
+                logger.LogWarning("SMTP rechazó el correo {CorreoId} o no respondió. Código {CodigoSmtp}. Sigue pendiente.",
+                    correo.Id, error.StatusCode);
+                continue;
             }
+            catch (FormatException)
+            {
+                logger.LogWarning("Formato SMTP inválido para el correo {CorreoId}. Sigue pendiente.", correo.Id);
+                continue;
+            }
+            catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+            {
+                logger.LogWarning("Se agotó el tiempo de espera SMTP para el correo {CorreoId}. Sigue pendiente.", correo.Id);
+                continue;
+            }
+
+            correo.Estado = EstadoCorreo.Enviado;
+            correo.EnviadoEn = DateTime.UtcNow;
+            await db.SaveChangesAsync(CancellationToken.None);
+            logger.LogInformation("SMTP aceptó el correo {CorreoId}.", correo.Id);
         }
     }
 }

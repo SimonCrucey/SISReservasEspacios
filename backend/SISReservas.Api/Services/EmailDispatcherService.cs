@@ -18,12 +18,16 @@ public sealed class EmailDispatcherService(
             try
             {
                 using var scope = scopes.CreateScope();
-                await scope.ServiceProvider.GetRequiredService<EmailSenderService>().SendPendingAsync();
+                await scope.ServiceProvider.GetRequiredService<EmailSenderService>().SendPendingAsync(stoppingToken);
             }
-            catch (Exception ex)
+            catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
             {
-                // Un fallo de SMTP o base de datos no debe detener la API.
-                logger.LogError(ex, "Falló el despacho de correo; se reintentará en el próximo ciclo.");
+                break;
+            }
+            catch (Exception error)
+            {
+                logger.LogError("Falló el ciclo de correo ({TipoError}). Revisa SMTP y la base de datos. Se reintentará.",
+                    error.GetType().Name);
             }
 
             try { await Task.Delay(TimeSpan.FromSeconds(10), stoppingToken); }
