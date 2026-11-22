@@ -395,6 +395,37 @@ try {
     $null=Api GET "/api/reportes/reservas$rango" 401
     $reporte=Api GET "/api/reportes/reservas$rango" 200 $null $u
     Check 'Reporte SQL horas de reservas' ($reporte.totalReservas -eq 1 -and [Math]::Abs($reporte.totalHoras-1) -lt 0.0001)
+    # Regresión H-01: datetime2(7), fracciones almacenadas y ventanas parciales.
+    $origenFraccion=$inicio.AddHours(2)
+    $inicioFraccion=$origenFraccion.AddTicks(9000001)
+    $finFraccion=$origenFraccion.AddTicks(11000004)
+    $null=Api POST '/api/reservas' 201 @{
+        espacioId=$espacio
+        fechaInicio=$inicioFraccion.ToString('o')
+        fechaFin=$finFraccion.ToString('o')
+    } $u
+    $casosPrecision=@(
+        @{Nombre='Intervalo completo con fracciones almacenadas';Inicio=$origenFraccion;Fin=$origenFraccion.AddSeconds(2);Segundos=0.2000003},
+        @{Nombre='Interseccion parcial cruzando segundo';Inicio=$origenFraccion.AddTicks(9500002);Fin=$origenFraccion.AddTicks(10500003);Segundos=0.1000001},
+        @{Nombre='Interseccion dentro del mismo segundo';Inicio=$origenFraccion.AddTicks(9600003);Fin=$origenFraccion.AddTicks(9900004);Segundos=0.0300001}
+    )
+    foreach($caso in $casosPrecision){
+        $rangoPrecision="?inicio=$([uri]::EscapeDataString($caso.Inicio.ToString('o')))&fin=$([uri]::EscapeDataString($caso.Fin.ToString('o')))"
+        $precision=Api GET "/api/reportes/reservas$rangoPrecision" 200 $null $u
+        $segundosObtenidos=[double]$precision.totalHoras*3600
+        Check "H-01 SQL $($caso.Nombre): esperado $($caso.Segundos) s, obtenido $segundosObtenidos s" (
+            $precision.totalReservas -eq 1 -and
+            [Math]::Abs($segundosObtenidos-$caso.Segundos) -lt 0.00000001)
+    }
+    $null=Api POST '/api/reservas' 201 @{
+        espacioId=$espacio
+        fechaInicio=$inicioFraccion.AddSeconds(4).ToString('o')
+        fechaFin=$finFraccion.AddSeconds(4).ToString('o')
+    } $u
+    $rangoSuma="?inicio=$([uri]::EscapeDataString($origenFraccion.ToString('o')))&fin=$([uri]::EscapeDataString($origenFraccion.AddSeconds(6).ToString('o')))"
+    $suma=Api GET "/api/reportes/reservas$rangoSuma" 200 $null $u
+    Check 'H-01 SQL suma agrupada conserva fracciones' ($suma.totalReservas -eq 2 -and
+        $suma.grupos.Count -eq 1 -and [Math]::Abs([double]$suma.totalHoras*3600-0.4000006) -lt 0.00000001)
     $ajeno=Api GET "/api/reportes/reservas$rango" 200 $null $o
     Check 'Reporte SQL sin datos ajenos' ($ajeno.totalReservas -eq 0)
     $total=Api GET "/api/reportes/reservas$rango" 200 $null $a

@@ -122,7 +122,61 @@ posicional provocaba 500. El commit 8038f09 lo reemplazó por una clase de entra
 con propiedad nullable obligatoria. La regresión HTTP comprobó cuerpo vacío 400,
 false 200 y true 200. El clon anterior y sus evidencias se conservaron.
 
-Los cambios posteriores a 8038f09 solo documentan estos resultados. La etiqueta
-local de entrega se prepara después de comprobarlos, sin publicar referencias.
+El cierre inicial posterior a 8038f09 solo documentó estos resultados. La etiqueta
+local de entrega se preparó después de comprobarlos, sin publicar referencias.
 La ventana SMTP/SQL descrita arriba permanece como limitación técnica explícita,
 no como garantía de entrega exactamente una vez.
+
+## Corrección H-01: precisión de las horas reservadas (2026-11-22)
+
+La fórmula anterior sumaba `DATEDIFF(second, inicio, fin) / 3600.0` después
+de recortar cada reserva al rango consultado. DATEDIFF cuenta límites de segundo,
+no la duración real: una reserva entre 00:00:00.9000001 y 00:00:01.1000004
+aportaba un segundo en lugar de 0.2000003 segundos.
+
+La fórmula corregida recupera los ticks de 100 ns de `datetime2(7)`:
+
+```text
+ticks = DATEDIFF(second, inicio, fin) * 10000000
+      + (fin.Millisecond - inicio.Millisecond) * 10000
+      + (fin.Microsecond - inicio.Microsecond) * 10
+      + (fin.Nanosecond - inicio.Nanosecond) / 100
+horas = double(SUM(decimal(ticks))) / 36000000000
+```
+
+EF Core traduce los componentes de fracción a DATEPART en SQL Server.
+La agrupación y la suma permanecen en SQL; la suma decimal evita desbordar
+bigint al acumular intervalos. Se conservan intersecciones, filtros de usuario,
+fechas, estados y grupos. La salida double mantiene su redondeo binario habitual.
+InMemory calcula los mismos ticks mediante DateTime.Ticks; no demuestra por sí
+solo la corrección SQL.
+
+Evidencia antes/después con la misma prueba HTTP y SQL Server real:
+
+| Caso | Antes | Después |
+| --- | --- | --- |
+| Intervalo completo de 0.2000003 s | 1 s: FAIL | 0.2000003 s: PASS |
+| Intersección cruzando segundo | No alcanzado tras el fallo anterior | 0.1000001 s: PASS |
+| Intersección dentro del mismo segundo | No alcanzado tras el fallo anterior | 0.0300001 s: PASS |
+| Suma de dos reservas en un grupo | No alcanzado tras el fallo anterior | 0.4000006 s: PASS |
+
+- La ejecución anterior falló por la aserción H-01, con HTTP 200 y sin errores
+  de compilación, en el proyecto `sisp5-1f937b643b984a47a0aa12bfcf950065`.
+- La ejecución corregida pasó **188 comprobaciones, 145 peticiones HTTP y
+  38 rutas/métodos**, sin fallos, en `sisp5-7829f8f4e5cd410d833f1946f3452ce0`.
+  También comprobó horas completas, filtros, rangos sin resultados, concurrencia,
+  reintentos SMTP y persistencia tras down/up. Se usaron datos ficticios y
+  volúmenes propios; no se modificaron las bases ni los volúmenes del proyecto principal.
+- Los resultados JSON privados de ambas ejecuciones se conservaron fuera de Git.
+  Para repetir la regresión: `powershell.exe -NoProfile -ExecutionPolicy Bypass -File tests/integracion/Validar-Practica5.ps1`.
+- Se añadieron seis casos AAA a `ReportesTests.Reservas_ConservaPrecisionDeTicks_EnIntersecciones`:
+  fracciones, intersecciones, un tick, cruce de medianoche y máximo de 3660 días.
+- `dotnet build SISReservasEspacios.slnx`: **0 errores, 0 advertencias**.
+- `dotnet test SISReservasEspacios.slnx --no-build`: **183 aprobadas, 0 fallidas,
+  0 omitidas**. Las pruebas existentes de rangos vacíos permanecen aprobadas.
+- `dotnet ef migrations has-pending-model-changes --project backend/SISReservas.Api --no-build`:
+  sin cambios de modelo pendientes. No se modificaron migraciones.
+
+Esta intervención corrige únicamente H-01. No corrige ni da por resueltos H-02,
+H-03 o H-04. La etiqueta practica-5 se actualiza únicamente en local tras validar;
+no se publica esta corrección.

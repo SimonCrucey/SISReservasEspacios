@@ -6,6 +6,40 @@ namespace SISReservas.Api.Tests;
 
 public class ReportesTests
 {
+    [Theory]
+    [InlineData(9000001L, 11000004L, 0L, 20000000L, 2000003L)]
+    [InlineData(9000001L, 11000004L, 9500002L, 10500003L, 1000001L)]
+    [InlineData(9000001L, 11000004L, 9600003L, 9900004L, 300001L)]
+    [InlineData(9999999L, 10000000L, 0L, 20000000L, 1L)]
+    [InlineData(-1L, 1L, -2L, 2L, 2L)]
+    [InlineData(1L, 3162239999999999L, 0L, 3162240000000000L, 3162239999999998L)]
+    public async Task Reservas_ConservaPrecisionDeTicks_EnIntersecciones(
+        long inicioReserva, long finReserva, long inicioRango, long finRango, long ticksEsperados)
+    {
+        // Arrange
+        using var datos = new TestDatabase();
+        var db = datos.CreateContext();
+        var usuario = await TestData.AgregarUsuarioAsync(db);
+        var origen = new DateTime(2026, 11, 1, 0, 0, 0, DateTimeKind.Utc);
+        db.Reservas.Add(new Reserva
+        {
+            UsuarioId = usuario.Id,
+            Espacio = new Espacio { Nombre = "Cancha", Activo = true, Tipo = TipoEspacio.Cancha },
+            FechaInicio = origen.AddTicks(inicioReserva),
+            FechaFin = origen.AddTicks(finReserva)
+        });
+        await db.SaveChangesAsync();
+        // Act
+        var reporte = await new ReporteService(db).ReservasAsync(
+            usuario.Id, origen.AddTicks(inicioRango), origen.AddTicks(finRango));
+        // Assert
+        var horasEsperadas = (double)ticksEsperados / TimeSpan.TicksPerHour;
+        Assert.Equal(1, reporte.TotalReservas);
+        Assert.Single(reporte.Grupos);
+        Assert.InRange(Math.Abs(reporte.TotalHoras - horasEsperadas),
+            0, Math.Max(1e-15, Math.Abs(horasEsperadas) * 1e-14));
+    }
+
     [Fact]
     public async Task Solicitudes_AgrupaEnRango_YAislaPropietarios()
     {

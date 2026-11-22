@@ -40,15 +40,22 @@ public class ReporteService(SISReservasDbContext db)
             });
         List<ReservasPorEspacioDto> grupos;
         if (db.Database.IsRelational())
+            // DATEDIFF cuenta límites. Ajustar las fracciones recupera ticks de datetime2(7).
+            // SUM(decimal) evita desbordar bigint al acumular muchos intervalos.
             grupos = await filas.GroupBy(r => new { r.EspacioId, r.Espacio, r.Estado })
                 .Select(g => new ReservasPorEspacioDto(g.Key.EspacioId, g.Key.Espacio, g.Key.Estado,
-                    g.Count(), g.Sum(r => (long)EF.Functions.DateDiffSecond(r.Inicio, r.Fin)) / 3600.0))
+                    g.Count(), (double)g.Sum(r => (decimal)(
+                        (long)EF.Functions.DateDiffSecond(r.Inicio, r.Fin) * TimeSpan.TicksPerSecond
+                        + (r.Fin.Millisecond - r.Inicio.Millisecond) * TimeSpan.TicksPerMillisecond
+                        + (r.Fin.Microsecond - r.Inicio.Microsecond) * 10L
+                        + (r.Fin.Nanosecond - r.Inicio.Nanosecond) / 100)) / TimeSpan.TicksPerHour))
                 .ToListAsync();
         else
-            // EF InMemory no implementa DateDiffSecond. La alternativa solo sirve a las pruebas.
+            // InMemory calcula los mismos ticks sin las funciones exclusivas de SQL Server.
             grupos = await filas.GroupBy(r => new { r.EspacioId, r.Espacio, r.Estado })
                 .Select(g => new ReservasPorEspacioDto(g.Key.EspacioId, g.Key.Espacio, g.Key.Estado,
-                    g.Count(), g.Sum(r => (r.Fin - r.Inicio).TotalSeconds) / 3600.0)).ToListAsync();
+                    g.Count(), (double)g.Sum(r => (decimal)(r.Fin.Ticks - r.Inicio.Ticks))
+                        / TimeSpan.TicksPerHour)).ToListAsync();
         grupos = grupos.OrderByDescending(g => g.Horas).ThenByDescending(g => g.Reservas)
             .ThenBy(g => g.EspacioId).ThenBy(g => g.Estado).ToList();
         return new(inicio, fin, grupos.Sum(g => g.Reservas), grupos.Sum(g => g.Horas), grupos);

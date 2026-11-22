@@ -303,15 +303,18 @@ GET /api/reportes/reservas?inicio=2026-11-01T00:00:00Z&fin=2026-12-01T00:00:00Z
   Excluye Cancelada. Incluye Pendiente, Confirmada y Completada para representar
   demanda vigente o realizada. Las horas son la suma de intersecciones por reserva.
 - Una reserva parcialmente solapada aporta solo las horas dentro del rango.
-  Las duraciones se calculan en segundos SQL y se convierten a horas.
+  Las duraciones se calculan en ticks de 100 ns y se convierten a horas.
 - Los grupos de reservas se ordenan por horas, cantidad de reservas y espacio.
   Los totales resumen los grupos, no un listado de entidades.
 - Sin resultados se devuelve una lista vacía y totales cero.
 - Para probar el filtro, crea datos en dos periodos distintos y consulta ambos.
   Un Estándar no recibe registros ajenos ni siquiera en los totales.
-- `GroupBy`, `Count` y `Sum/DateDiffSecond` se ejecutan en SQL Server.
-  La variante EF InMemory de pruebas usa una función de duración equivalente,
-  porque ese proveedor no implementa DateDiffSecond.
+- `GroupBy`, `Count` y `Sum` se ejecutan en SQL Server. Se ajusta `DateDiffSecond`
+  con las diferencias de milisegundos, microsegundos y nanosegundos para conservar
+  la precisión de `datetime2(7)`: cruzar un límite de segundo no redondea la duración.
+  Los ticks se suman como decimal y luego se convierten a horas; el resultado
+  público `double` conserva su redondeo habitual de representación binaria.
+  La variante EF InMemory calcula la misma diferencia mediante `DateTime.Ticks`.
 
 El contexto delegado y los criterios previos se encuentran en [AGENTS.md](AGENTS.md)
 y [criterios de aceptación](docs/criterios-notificaciones-reportes.md).
@@ -342,9 +345,9 @@ Con .NET SDK 10, desde la raíz:
 dotnet test SISReservasEspacios.slnx
 ```
 
-La última ejecución comprobada de Práctica 5 terminó con **177 aprobadas, 0 fallidas y 0 omitidas**. La compilación tuvo **0 errores y 0 advertencias**. La suite prueba reglas y servicios con bases EF InMemory y contiene pruebas SMTP de loopback. No exige iniciar la API ni disponer de SQL Server.
+La última ejecución comprobada de Práctica 5, después de corregir H-01, terminó con **183 aprobadas, 0 fallidas y 0 omitidas**. La compilación tuvo **0 errores y 0 advertencias**. La suite prueba reglas y servicios con bases EF InMemory y contiene pruebas SMTP de loopback. No exige iniciar la API ni disponer de SQL Server.
 
-La validación funcional de Práctica 4 en una copia de trabajo aislada de Docker completó **114 comprobaciones**, incluidas **96 peticiones HTTP** y **31 combinaciones de ruta y método**. Incluyó correo recibido en Mailpit y persistencia tras down/up. Esa ejecución fue sobre una copia del trabajo, no un clon remoto. La consulta real a WeatherAPI se confirmó por separado. La verificación de Práctica 5 desde un clon Git local completó 178 comprobaciones (139 HTTP), con 0 fallos y las 38 rutas/métodos cubiertos. Detalles en [verificación de Práctica 5](docs/verificacion-practica-5.md).
+La validación funcional de Práctica 4 en una copia de trabajo aislada de Docker completó **114 comprobaciones**, incluidas **96 peticiones HTTP** y **31 combinaciones de ruta y método**. Incluyó correo recibido en Mailpit y persistencia tras down/up. Esa ejecución fue sobre una copia del trabajo, no un clon remoto. La consulta real a WeatherAPI se confirmó por separado. La verificación inicial de Práctica 5 desde un clon Git local completó 178 comprobaciones (139 HTTP). La regresión posterior de H-01, en una copia Docker aislada con SQL Server real, completó **188 comprobaciones (145 HTTP), 0 fallos y las 38 rutas/métodos cubiertos**, incluyendo precisión de fracciones de segundo. Detalles en [verificación de Práctica 5](docs/verificacion-practica-5.md).
 
 Para una revisión manual, usa Swagger y verifica registro/activación, login/logout, rechazo administrativo a Estándar, recuperación, aprobación/rechazo de permisos, reserva válida y transición prohibida. Prueba también Documentos y persistencia con dos cuentas para comprobar aislamiento.
 
