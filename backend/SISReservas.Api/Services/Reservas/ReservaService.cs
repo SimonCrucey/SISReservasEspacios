@@ -21,8 +21,9 @@ public sealed record ResultadoReserva<T>(MotivoResultadoReserva Motivo, string M
     public static ResultadoReserva<T> Falla(MotivoResultadoReserva motivo, string mensaje) => new(motivo, mensaje, default);
 }
 
-public class ReservaService(SISReservasDbContext db, PermisoService permisos, TimeProvider reloj)
+public class ReservaService(SISReservasDbContext db, PermisoService permisos, TimeProvider reloj, NotificacionService? notificaciones = null)
 {
+    private readonly NotificacionService _notificaciones = notificaciones ?? new NotificacionService(db);
     private DateTime Ahora => reloj.GetUtcNow().UtcDateTime;
 
     private async Task<Usuario?> UsuarioValidoAsync(Guid id) =>
@@ -161,6 +162,8 @@ public class ReservaService(SISReservasDbContext db, PermisoService permisos, Ti
         try { TransicionesReserva.AsegurarPermitida(reserva.Estado, destino); }
         catch (InvalidOperationException) { return Falla(MotivoResultadoReserva.Conflicto, "Transición no permitida."); }
         reserva.Estado = destino;
+        if (destino == EstadoReserva.Confirmada)
+            await _notificaciones.PrepararAsync([reserva.UsuarioId], "Reserva confirmada", $"Tu reserva {reserva.Id} del espacio {reserva.EspacioId} fue confirmada.");
         await db.SaveChangesAsync();
         return ResultadoReserva<ReservaResponseDto>.Ok(ToDto(reserva));
     }
@@ -180,6 +183,7 @@ public class ReservaService(SISReservasDbContext db, PermisoService permisos, Ti
         catch (Exception ex) when (ex is DbUpdateException || ex is SqlException)
         {
             if (transaccion is not null) await transaccion.RollbackAsync();
+            _notificaciones.DescartarPendientes();
             foreach (var entry in db.ChangeTracker.Entries<Reserva>().ToList())
             {
                 if (entry.State == EntityState.Added) entry.State = EntityState.Detached;

@@ -69,13 +69,16 @@ public class SolicitudPermisoService
 
     private readonly SISReservasDbContext _db;
     private readonly PermisoService _permisoService;
+    private readonly NotificacionService _notificaciones;
 
     public SolicitudPermisoService(
         SISReservasDbContext db,
-        PermisoService permisoService)
+        PermisoService permisoService,
+        NotificacionService? notificaciones = null)
     {
         _db = db;
         _permisoService = permisoService;
+        _notificaciones = notificaciones ?? new NotificacionService(db);
     }
 
     public async Task<ResultadoSolicitudPermiso<SolicitudPermisoResponseDto>>
@@ -126,6 +129,7 @@ public class SolicitudPermisoService
         };
 
         _db.SolicitudesPermiso.Add(solicitud);
+        await _notificaciones.SolicitudCreadaAsync(solicitud.Id);
 
         try
         {
@@ -133,6 +137,8 @@ public class SolicitudPermisoService
         }
         catch (DbUpdateException)
         {
+            _notificaciones.DescartarPendientes();
+            _notificaciones.DescartarPendientes();
             _db.Entry(solicitud).State = EntityState.Detached;
 
             return ResultadoSolicitudPermiso<SolicitudPermisoResponseDto>
@@ -337,6 +343,7 @@ public class SolicitudPermisoService
         }
 
         solicitud.AplicadaEn = DateTime.UtcNow;
+        await _notificaciones.PrepararAsync([solicitud.SolicitanteId], "Solicitud aprobada", $"La solicitud {solicitud.Id} fue aprobada y el permiso aplicado.");
 
         try
         {
@@ -344,6 +351,7 @@ public class SolicitudPermisoService
         }
         catch (DbUpdateConcurrencyException)
         {
+            _notificaciones.DescartarPendientes();
             RestaurarSolicitud(
                 solicitud,
                 estadoOriginal,
@@ -361,6 +369,7 @@ public class SolicitudPermisoService
         }
         catch (DbUpdateException exception)
         {
+            _notificaciones.DescartarPendientes();
             RestaurarSolicitud(
                 solicitud,
                 estadoOriginal,
@@ -480,6 +489,7 @@ public class SolicitudPermisoService
         solicitud.ResueltaPorId = resolutorId;
         solicitud.ResueltaEn = DateTime.UtcNow;
         solicitud.MotivoRechazo = motivo;
+        await _notificaciones.PrepararAsync([solicitud.SolicitanteId], "Solicitud rechazada", $"La solicitud {solicitud.Id} fue rechazada. Motivo: {motivo}");
 
         try
         {
@@ -487,6 +497,7 @@ public class SolicitudPermisoService
         }
         catch (DbUpdateConcurrencyException)
         {
+            _notificaciones.DescartarPendientes();
             RestaurarSolicitud(
                 solicitud,
                 estadoOriginal,
@@ -502,6 +513,7 @@ public class SolicitudPermisoService
         }
         catch (DbUpdateException)
         {
+            _notificaciones.DescartarPendientes();
             RestaurarSolicitud(
                 solicitud,
                 estadoOriginal,

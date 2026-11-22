@@ -15,6 +15,7 @@ public class Usuario
     public Rol Rol { get; set; } = Rol.Estandar;
 
     public bool Activo { get; set; }
+    public bool CorreoNotificacionesHabilitado { get; set; } = true;
 
     public int IntentosFallidos { get; set; }
 

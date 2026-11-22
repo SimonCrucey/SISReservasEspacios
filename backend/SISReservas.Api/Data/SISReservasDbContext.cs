@@ -19,10 +19,19 @@ public class SISReservasDbContext : DbContext
     public DbSet<Espacio> Espacios => Set<Espacio>();
     public DbSet<Reserva> Reservas => Set<Reserva>();
     public DbSet<Documento> Documentos => Set<Documento>();
+    public DbSet<Notificacion> Notificaciones => Set<Notificacion>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
+        modelBuilder.Entity<Usuario>().Property(u => u.CorreoNotificacionesHabilitado).HasDefaultValue(true);
+        modelBuilder.Entity<Notificacion>(entity =>
+        {
+            entity.Property(n => n.Asunto).HasMaxLength(250).IsRequired();
+            entity.Property(n => n.Mensaje).IsRequired();
+            entity.HasIndex(n => new { n.UsuarioId, n.LeidaEn, n.CreadaEn });
+            entity.HasOne<Usuario>().WithMany().HasForeignKey(n => n.UsuarioId).OnDelete(DeleteBehavior.Restrict);
+        });
 
         modelBuilder.Entity<Documento>(entity =>
         {

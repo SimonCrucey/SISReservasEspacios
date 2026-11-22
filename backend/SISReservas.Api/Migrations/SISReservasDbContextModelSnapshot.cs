@@ -137,6 +137,37 @@ namespace SISReservas.Api.Migrations
                         });
                 });
 
+            modelBuilder.Entity("SISReservas.Api.Models.Notificacion", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("Asunto")
+                        .IsRequired()
+                        .HasMaxLength(250)
+                        .HasColumnType("nvarchar(250)");
+
+                    b.Property<DateTime>("CreadaEn")
+                        .HasColumnType("datetime2");
+
+                    b.Property<DateTime?>("LeidaEn")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("Mensaje")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<Guid>("UsuarioId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("UsuarioId", "LeidaEn", "CreadaEn");
+
+                    b.ToTable("Notificaciones");
+                });
+
             modelBuilder.Entity("SISReservas.Api.Models.Reserva", b =>
                 {
                     b.Property<int>("Id")
@@ -314,6 +345,11 @@ namespace SISReservas.Api.Migrations
                     b.Property<DateTime?>("BloqueadoHasta")
                         .HasColumnType("datetime2");
 
+                    b.Property<bool>("CorreoNotificacionesHabilitado")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bit")
+                        .HasDefaultValue(true);
+
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("datetime2");
 
@@ -384,6 +420,15 @@ namespace SISReservas.Api.Migrations
                 });
 
             modelBuilder.Entity("SISReservas.Api.Models.Documento", b =>
+                {
+                    b.HasOne("SISReservas.Api.Models.Usuario", null)
+                        .WithMany()
+                        .HasForeignKey("UsuarioId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("SISReservas.Api.Models.Notificacion", b =>
                 {
                     b.HasOne("SISReservas.Api.Models.Usuario", null)
                         .WithMany()

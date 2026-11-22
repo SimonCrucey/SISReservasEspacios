@@ -55,6 +55,7 @@ builder.Services.AddScoped<SolicitudPermisoService>();
 builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddScoped<ReservaService>();
 builder.Services.AddScoped<DocumentoService>();
+builder.Services.AddScoped<NotificacionService>();
 builder.Services.AddSingleton(new ClimaOptions(
     Environment.GetEnvironmentVariable("WEATHER_API_KEY") ?? "",
     Environment.GetEnvironmentVariable("WEATHER_LOCATION") ?? "18.4861,-69.9312"));
