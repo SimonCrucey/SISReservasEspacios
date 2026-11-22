@@ -3,5 +3,6 @@
 public enum EstadoCorreo
 {
     Pendiente = 1,
-    Enviado = 2
+    Enviado = 2,
+    Fallido = 3
 }

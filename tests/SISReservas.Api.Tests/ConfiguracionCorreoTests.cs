@@ -58,6 +58,7 @@ public class ConfiguracionCorreoTests
         using var dispatcher = new EmailDispatcherService(provider.GetRequiredService<IServiceScopeFactory>(), config, NullLogger<EmailDispatcherService>.Instance);
         // Act
         await dispatcher.StartAsync(CancellationToken.None);
+        await dispatcher.ExecuteTask!.WaitAsync(TimeSpan.FromSeconds(5));
         await dispatcher.StopAsync(CancellationToken.None);
         // Assert
         Assert.True(dispatcher.ExecuteTask!.IsCompletedSuccessfully);

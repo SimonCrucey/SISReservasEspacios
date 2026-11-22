@@ -53,12 +53,30 @@ namespace SISReservas.Api.Migrations
                         .HasMaxLength(30)
                         .HasColumnType("nvarchar(30)");
 
+                    b.Property<int>("Intentos")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime?>("ReclamoHasta")
+                        .HasColumnType("datetime2");
+
+                    b.Property<Guid?>("ReclamoId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("UltimoError")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<DateTime?>("UltimoIntentoEn")
+                        .HasColumnType("datetime2");
+
                     b.Property<Guid>("UsuarioId")
                         .HasColumnType("uniqueidentifier");
 
                     b.HasKey("Id");
 
                     b.HasIndex("UsuarioId");
+
+                    b.HasIndex("Estado", "ReclamoHasta", "CreadoEn");
 
                     b.ToTable("CorreosEnCola");
                 });

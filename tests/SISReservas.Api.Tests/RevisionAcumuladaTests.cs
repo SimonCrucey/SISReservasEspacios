@@ -155,6 +155,10 @@ public class RevisionAcumuladaTests
         var procesado = await e.Database.CreateContext().CorreosEnCola.SingleAsync();
         Assert.Equal(EstadoCorreo.Enviado, procesado.Estado);
         Assert.NotNull(procesado.EnviadoEn);
+        await remitente.SendPendingAsync(tiempo.Token);
+        var repetido = await e.Database.CreateContext().CorreosEnCola.SingleAsync();
+        Assert.Equal(1, repetido.Intentos);
+        Assert.Equal(EstadoCorreo.Enviado, repetido.Estado);
     }
 
     private static async Task<string> RecibirSmtpAsync(TcpListener servidor, CancellationToken ct)

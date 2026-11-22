@@ -132,6 +132,8 @@ public class SISReservasDbContext : DbContext
 
         modelBuilder.Entity<CorreoEnCola>(entity =>
         {
+            entity.Property(c => c.UltimoError).HasMaxLength(500);
+            entity.HasIndex(c => new { c.Estado, c.ReclamoHasta, c.CreadoEn });
             entity.HasKey(c => c.Id);
 
             entity.Property(c => c.Destinatario)

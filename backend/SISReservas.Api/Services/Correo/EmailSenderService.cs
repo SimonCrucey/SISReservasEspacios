@@ -1,7 +1,8 @@
-﻿using System.Net;
+using System.Net;
 using System.Net.Mail;
 using Microsoft.EntityFrameworkCore;
 using SISReservas.Api.Data;
+using SISReservas.Api.Models;
 using SISReservas.Api.Models.Enums;
 
 namespace SISReservas.Api.Services;
@@ -9,80 +10,141 @@ namespace SISReservas.Api.Services;
 public class EmailSenderService(
     SISReservasDbContext db, IConfiguration configuration, ILogger<EmailSenderService> logger)
 {
+    public const int MaximoIntentos = 3;
+    public const int TamanoLote = 20;
+    // EF InMemory no admite UPDATE condicional. Solo se usa esta exclusión en pruebas.
+    private static readonly SemaphoreSlim ProcesamientoNoRelacional = new(1, 1);
+
     public async Task SendPendingAsync(CancellationToken cancellationToken = default)
     {
-        var host = configuration["SMTP_HOST"];
-        var portText = configuration["SMTP_PORT"];
-        var username = configuration["SMTP_USERNAME"];
-        var password = configuration["SMTP_PASSWORD"];
-        var from = configuration["SMTP_FROM"];
-        var sslText = configuration["SMTP_ENABLE_SSL"];
-        var useAuthText = configuration["SMTP_USE_AUTH"] ?? "true";
-
-        if (string.IsNullOrWhiteSpace(host) ||
-            !int.TryParse(portText, out var port) ||
-            port < 1 || port > 65535 ||
-            !MailAddress.TryCreate(from, out var remitente) ||
-            !bool.TryParse(sslText, out var enableSsl) ||
-            !bool.TryParse(useAuthText, out var useAuth) ||
-            (useAuth && (string.IsNullOrWhiteSpace(username) || string.IsNullOrWhiteSpace(password))))
+        if (!db.Database.IsRelational())
         {
-            throw new InvalidOperationException(
-                "Configura SMTP_HOST, SMTP_PORT, SMTP_USERNAME, " +
-                "SMTP_PASSWORD (si SMTP_USE_AUTH=true), SMTP_FROM y SMTP_ENABLE_SSL " +
-                "como variables de entorno.");
+            await ProcesamientoNoRelacional.WaitAsync(cancellationToken);
+            try { await ProcesarAsync(cancellationToken); }
+            finally { ProcesamientoNoRelacional.Release(); }
+        }
+        else await ProcesarAsync(cancellationToken);
+    }
+
+    private async Task ProcesarAsync(CancellationToken ct)
+    {
+        var ahora = DateTime.UtcNow;
+        var agotados = db.CorreosEnCola.Where(c => c.Estado == EstadoCorreo.Pendiente
+            && c.Intentos >= MaximoIntentos && (c.ReclamoHasta == null || c.ReclamoHasta <= ahora));
+        if (db.Database.IsRelational())
+            await agotados.ExecuteUpdateAsync(s => s.SetProperty(c => c.Estado, EstadoCorreo.Fallido)
+                .SetProperty(c => c.UltimoError, "Se agotaron los intentos; el último procesamiento pudo interrumpirse.")
+                .SetProperty(c => c.ReclamoId, (Guid?)null).SetProperty(c => c.ReclamoHasta, (DateTime?)null), ct);
+        else
+        {
+            foreach (var correo in await agotados.ToListAsync(ct))
+            {
+                correo.Estado = EstadoCorreo.Fallido;
+                correo.UltimoError = "Se agotaron los intentos; el último procesamiento pudo interrumpirse.";
+                correo.ReclamoId = null;
+                correo.ReclamoHasta = null;
+            }
+            await db.SaveChangesAsync(ct);
         }
 
-        var pendientes = await db.CorreosEnCola
-            .Where(c => c.Estado == EstadoCorreo.Pendiente)
-            .OrderBy(c => c.CreadoEn)
-            .ToListAsync(cancellationToken);
-
-        using var smtp = new SmtpClient(host, port)
+        var ids = await db.CorreosEnCola.AsNoTracking()
+            .Where(c => c.Estado == EstadoCorreo.Pendiente && c.Intentos < MaximoIntentos
+                && (c.ReclamoHasta == null || c.ReclamoHasta <= ahora))
+            .OrderBy(c => c.CreadoEn).ThenBy(c => c.Id).Select(c => c.Id).Take(TamanoLote).ToListAsync(ct);
+        foreach (var id in ids)
         {
-            EnableSsl = enableSsl,
-            UseDefaultCredentials = false,
-            Credentials = useAuth ? new NetworkCredential(username, password) : null,
-            DeliveryMethod = SmtpDeliveryMethod.Network
-        };
+            ct.ThrowIfCancellationRequested();
+            var reclamo = Guid.NewGuid();
+            ahora = DateTime.UtcNow;
+            var disponibles = db.CorreosEnCola.Where(c => c.Id == id && c.Estado == EstadoCorreo.Pendiente
+                && c.Intentos < MaximoIntentos && (c.ReclamoHasta == null || c.ReclamoHasta <= ahora));
+            CorreoEnCola? correo;
+            if (db.Database.IsRelational())
+            {
+                var afectados = await disponibles.ExecuteUpdateAsync(s => s
+                    .SetProperty(c => c.ReclamoId, reclamo)
+                    .SetProperty(c => c.ReclamoHasta, ahora.AddMinutes(2))
+                    .SetProperty(c => c.UltimoIntentoEn, ahora)
+                    .SetProperty(c => c.Intentos, c => c.Intentos + 1), ct);
+                if (afectados == 0) continue;
+                correo = await db.CorreosEnCola.AsNoTracking().SingleAsync(c => c.Id == id, ct);
+            }
+            else
+            {
+                correo = await disponibles.SingleOrDefaultAsync(ct);
+                if (correo is null) continue;
+                correo.ReclamoId = reclamo;
+                correo.ReclamoHasta = ahora.AddMinutes(2);
+                correo.UltimoIntentoEn = ahora;
+                correo.Intentos++;
+                await db.SaveChangesAsync(ct);
+            }
 
-        foreach (var correo in pendientes)
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-            using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-            timeout.CancelAfter(TimeSpan.FromSeconds(20));
+            string? error = null;
             try
             {
+                using var smtp = CrearCliente();
                 using var mensaje = new MailMessage
                 {
-                    From = remitente,
+                    From = new MailAddress(configuration["SMTP_FROM"]!),
                     Subject = correo.Asunto,
                     Body = correo.Cuerpo
                 };
                 mensaje.To.Add(correo.Destinatario);
-                await smtp.SendMailAsync(mensaje, timeout.Token);
+                using var limite = CancellationTokenSource.CreateLinkedTokenSource(ct);
+                limite.CancelAfter(TimeSpan.FromSeconds(20));
+                await smtp.SendMailAsync(mensaje, limite.Token);
             }
-            catch (SmtpException error)
+            catch (SmtpException) { error = "SMTP no aceptó el mensaje o no está disponible."; }
+            catch (FormatException) { error = "Dirección o formato de correo inválido."; }
+            catch (ArgumentException) { error = "Configuración o dirección SMTP inválida."; }
+            catch (InvalidOperationException) { error = "Configuración SMTP incompleta."; }
+            catch (OperationCanceledException) when (!ct.IsCancellationRequested)
             {
-                logger.LogWarning("SMTP rechazó el correo {CorreoId} o no respondió. Código {CodigoSmtp}. Sigue pendiente.",
-                    correo.Id, error.StatusCode);
-                continue;
+                error = "Se agotó el tiempo de espera SMTP.";
             }
-            catch (FormatException)
+            // Cancelación del host conserva el reclamo: puede haber aceptación SMTP incierta.
+            var estado = error is null ? EstadoCorreo.Enviado
+                : correo.Intentos >= MaximoIntentos ? EstadoCorreo.Fallido : EstadoCorreo.Pendiente;
+            DateTime? enviada = error is null ? DateTime.UtcNow : null;
+            if (db.Database.IsRelational())
+                await db.CorreosEnCola.Where(c => c.Id == id && c.ReclamoId == reclamo)
+                    .ExecuteUpdateAsync(s => s.SetProperty(c => c.Estado, estado)
+                        .SetProperty(c => c.EnviadoEn, enviada).SetProperty(c => c.UltimoError, error)
+                        .SetProperty(c => c.ReclamoId, (Guid?)null).SetProperty(c => c.ReclamoHasta, (DateTime?)null),
+                        CancellationToken.None);
+            else
             {
-                logger.LogWarning("Formato SMTP inválido para el correo {CorreoId}. Sigue pendiente.", correo.Id);
-                continue;
+                correo.Estado = estado;
+                correo.EnviadoEn = enviada;
+                correo.UltimoError = error;
+                correo.ReclamoId = null;
+                correo.ReclamoHasta = null;
+                await db.SaveChangesAsync(CancellationToken.None);
             }
-            catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
-            {
-                logger.LogWarning("Se agotó el tiempo de espera SMTP para el correo {CorreoId}. Sigue pendiente.", correo.Id);
-                continue;
-            }
-
-            correo.Estado = EstadoCorreo.Enviado;
-            correo.EnviadoEn = DateTime.UtcNow;
-            await db.SaveChangesAsync(CancellationToken.None);
-            logger.LogInformation("SMTP aceptó el correo {CorreoId}.", correo.Id);
+            logger.LogInformation("Correo {CorreoId}: estado {Estado}, intento {Intentos}.", id, estado, correo.Intentos);
         }
+    }
+
+    private SmtpClient CrearCliente()
+    {
+        var host = configuration["SMTP_HOST"];
+        var from = configuration["SMTP_FROM"];
+        var auth = configuration["SMTP_USE_AUTH"] ?? "true";
+        if (string.IsNullOrWhiteSpace(host) || !int.TryParse(configuration["SMTP_PORT"], out var port)
+            || port is < 1 or > 65535 || !MailAddress.TryCreate(from, out _)
+            || !bool.TryParse(configuration["SMTP_ENABLE_SSL"], out var ssl)
+            || !bool.TryParse(auth, out var usarAuth))
+            throw new InvalidOperationException("Configuración SMTP incompleta.");
+        var username = configuration["SMTP_USERNAME"];
+        var password = configuration["SMTP_PASSWORD"];
+        if (usarAuth && (string.IsNullOrWhiteSpace(username) || string.IsNullOrWhiteSpace(password)))
+            throw new InvalidOperationException("Credenciales SMTP ausentes.");
+        return new SmtpClient(host, port)
+        {
+            EnableSsl = ssl, UseDefaultCredentials = false,
+            Credentials = usarAuth ? new NetworkCredential(username, password) : null,
+            DeliveryMethod = SmtpDeliveryMethod.Network
+        };
     }
 }

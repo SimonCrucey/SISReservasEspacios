@@ -21,4 +21,9 @@ public class CorreoEnCola
     public DateTime CreadoEn { get; set; } = DateTime.UtcNow;
 
     public DateTime? EnviadoEn { get; set; }
+    public int Intentos { get; set; }
+    public DateTime? UltimoIntentoEn { get; set; }
+    public string? UltimoError { get; set; }
+    public Guid? ReclamoId { get; set; }
+    public DateTime? ReclamoHasta { get; set; }
 }

@@ -92,6 +92,12 @@ if (app.Configuration.GetValue<bool>("Database:ApplyMigrations"))
 }
 
 var adminArgument = Array.IndexOf(args, "--administrador-inicial");
+if (args.Contains("--procesar-correos"))
+{
+    await using var scope = app.Services.CreateAsyncScope();
+    await scope.ServiceProvider.GetRequiredService<EmailSenderService>().SendPendingAsync();
+    return;
+}
 if (adminArgument >= 0)
 {
     if (adminArgument + 1 >= args.Length) throw new ArgumentException("Falta el correo del usuario activado.");
