@@ -342,9 +342,9 @@ Con .NET SDK 10, desde la raíz:
 dotnet test SISReservasEspacios.slnx
 ```
 
-La última ejecución comprobada antes de esta reorganización terminó con **177 aprobadas, 0 fallidas y 0 omitidas**. La compilación tuvo **0 errores y 0 advertencias**. La suite prueba reglas y servicios con bases EF InMemory y contiene pruebas SMTP de loopback. No exige iniciar la API ni disponer de SQL Server.
+La última ejecución comprobada de Práctica 5 terminó con **177 aprobadas, 0 fallidas y 0 omitidas**. La compilación tuvo **0 errores y 0 advertencias**. La suite prueba reglas y servicios con bases EF InMemory y contiene pruebas SMTP de loopback. No exige iniciar la API ni disponer de SQL Server.
 
-La validación funcional anterior en una copia de trabajo aislada de Docker completó **114 comprobaciones**, incluidas **96 peticiones HTTP** y **31 combinaciones de ruta y método**. Incluyó correo recibido en Mailpit y persistencia tras down/up. Esa ejecución fue sobre una copia del trabajo, no un clon remoto. La consulta real a WeatherAPI se confirmó por separado. Estos resultados son anteriores a esta edición documental.
+La validación funcional de Práctica 4 en una copia de trabajo aislada de Docker completó **114 comprobaciones**, incluidas **96 peticiones HTTP** y **31 combinaciones de ruta y método**. Incluyó correo recibido en Mailpit y persistencia tras down/up. Esa ejecución fue sobre una copia del trabajo, no un clon remoto. La consulta real a WeatherAPI se confirmó por separado. La verificación de Práctica 5 desde un clon Git local completó 178 comprobaciones (139 HTTP), con 0 fallos y las 38 rutas/métodos cubiertos. Detalles en [verificación de Práctica 5](docs/verificacion-practica-5.md).
 
 Para una revisión manual, usa Swagger y verifica registro/activación, login/logout, rechazo administrativo a Estándar, recuperación, aprobación/rechazo de permisos, reserva válida y transición prohibida. Prueba también Documentos y persistencia con dos cuentas para comprobar aislamiento.
 
@@ -384,7 +384,7 @@ dotnet run --project backend/SISReservas.Api --launch-profile http
 | Práctica 2 | `practica-2`, defectos 1 a 6 | Pruebas y mutantes de permisos | [Defectos históricos](docs/entregas/guia-acumulada-practica-4.md#práctica-2-defectos-históricos-de-gestión-de-permisos) |
 | Práctica 3 | `practica-3`, defectos 1 a 4 | Reservas, estados e integración con permisos | [Defectos y evidencias](docs/entregas/guia-acumulada-practica-4.md#defectos) |
 | Práctica 4 | `practica-4` | Documentos, Docker, persistencia y WeatherAPI | [Guía publicada y evidencias acumuladas](docs/entregas/guia-acumulada-practica-4.md) |
-| Práctica 5 | Preparación local | Notificaciones, cola robusta y reportes | [Criterios](docs/criterios-notificaciones-reportes.md), [verificación](docs/verificacion-practica-5.md) |
+| Práctica 5 | practica-5 (local, sin publicar) | Notificaciones, cola robusta y reportes | [Criterios](docs/criterios-notificaciones-reportes.md), [verificación](docs/verificacion-practica-5.md) |
 
 Los nombres completos de los mutantes son `practica-2-defecto-N` (N=1…6) y `practica-3-defecto-N` (N=1…4). Cada etiqueta conserva su versión evaluable. La guía archivada mantiene tablas detectoras, hashes, auditorías, evidencia SMTP y limitaciones de sus respectivas etapas. Sus afirmaciones históricas se interpretan en ese contexto.
 

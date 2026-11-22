@@ -97,3 +97,32 @@ Conservar la misión y los criterios originales, el orden real de commits, las
 pruebas que detectaron fallos y las correcciones. No presentar esta auditoría
 como una implementación de Asignación 3. No se delegó trabajo a subagentes.
 Los datos privados, tokens y mensajes completos quedan fuera del repositorio.
+
+## Clon Git local y cierre final
+
+Se creó un segundo clon local limpio, sin depender de GitHub ni de archivos
+ignorados del repositorio original, del commit de código
+8038f09bd6e729b002813f68c4612dfbd1e28552.
+
+- dotnet test restauró, compiló y pasó 177 pruebas, sin fallidas ni omitidas.
+- El script versionado pasó **178 comprobaciones**, **139 peticiones HTTP** y
+  **38 rutas/métodos**, sin fallos, en el proyecto Docker aislado
+  sisp5-ba6051e407934bd490cd169f19d9fd0d.
+- Se comprobó también el down/up posterior a las pruebas nuevas, conservando
+  la notificación leída, la preferencia, el correo Fallido y los datos de reportes.
+- La composición original del clon, con .env generado copiando .env.example,
+  construyó la API y respondió HTTP 200 en Swagger con el auxiliar detenido.
+  Solo se ajustaron el nombre del proyecto y el puerto para aislar la prueba.
+- El origen del clon es el repositorio local. No es un clon de una publicación
+  de Práctica 5 en GitHub.
+
+El primer clon detectó un error propio de la validación MVC del DTO de
+preferencias. Un atributo Required asociado a la propiedad de un record
+posicional provocaba 500. El commit 8038f09 lo reemplazó por una clase de entrada
+con propiedad nullable obligatoria. La regresión HTTP comprobó cuerpo vacío 400,
+false 200 y true 200. El clon anterior y sus evidencias se conservaron.
+
+Los cambios posteriores a 8038f09 solo documentan estos resultados. La etiqueta
+local de entrega se prepara después de comprobarlos, sin publicar referencias.
+La ventana SMTP/SQL descrita arriba permanece como limitación técnica explícita,
+no como garantía de entrega exactamente una vez.
