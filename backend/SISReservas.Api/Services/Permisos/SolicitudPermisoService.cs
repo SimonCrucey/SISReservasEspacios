@@ -138,7 +138,6 @@ public class SolicitudPermisoService
         catch (DbUpdateException)
         {
             _notificaciones.DescartarPendientes();
-            _notificaciones.DescartarPendientes();
             _db.Entry(solicitud).State = EntityState.Detached;
 
             return ResultadoSolicitudPermiso<SolicitudPermisoResponseDto>

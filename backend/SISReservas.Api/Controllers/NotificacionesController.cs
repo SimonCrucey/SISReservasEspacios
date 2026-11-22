@@ -24,8 +24,8 @@ public class NotificacionesController(NotificacionService servicio) : Controller
     public Task<IActionResult> Preferencias() => Ejecutar(async () => Ok(await servicio.PreferenciasAsync(Usuario)));
 
     [HttpPut("preferencias")]
-    public Task<IActionResult> CambiarPreferencias(PreferenciasDto request) => Ejecutar(async () =>
-        Ok(await servicio.PreferenciasAsync(Usuario, request.CorreoHabilitado)));
+    public Task<IActionResult> CambiarPreferencias(CambiarPreferenciasDto request) => Ejecutar(async () =>
+        Ok(await servicio.PreferenciasAsync(Usuario, request.CorreoHabilitado!.Value)));
 
     private async Task<IActionResult> Ejecutar(Func<Task<IActionResult>> accion)
     {

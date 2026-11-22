@@ -2,7 +2,7 @@
 
 Sistema de reservas de salones, canchas y equipos desarrollado para **Programación III · TDS-007 · ITLA · 2026-C-3**.
 
-Incluye Control de acceso, Gestión de permisos, reservas con máquina de estados, documentos con autorización y planificación exterior mediante WeatherAPI. La versión publicada de Práctica 4 corresponde a la etiqueta `practica-4`, commit `64125eb9c74ab5811edb47cfaabf88dc23f32ddb`.
+Incluye Control de acceso, Gestión de permisos, reservas con máquina de estados, documentos con autorización y planificación exterior mediante WeatherAPI. La última versión publicada es Práctica 4. Práctica 5 se prepara localmente para revisión. Práctica 4 corresponde a la etiqueta `practica-4`, commit `64125eb9c74ab5811edb47cfaabf88dc23f32ddb`.
 
 ## Tecnologías y arquitectura
 
@@ -194,6 +194,137 @@ Ejemplo comprobado mediante proveedor simulado:
 
 También se comprobó una consulta real del endpoint en Docker con una clave autorizada. Las pruebas simuladas cubren éxito, lluvia, clave ausente o rechazada, HTTP 503, timeout y datos incompletos. La ausencia de clave o fallo del proveedor produce HTTP 503 controlado y las demás operaciones siguen disponibles. La clave se obtiene del entorno y se suprimen los logs de URLs del proveedor.
 
+## Notificaciones
+
+Práctica 5 añade una bandeja persistente y reutiliza la cola SMTP existente.
+Todas las rutas requieren una sesión Bearer válida. Los Administradores destinatarios
+de solicitudes nuevas son los activos, según los criterios de esta entrega.
+
+| Evento | Cómo provocarlo en Swagger | Destinatario |
+| --- | --- | --- |
+| Solicitud creada | Estándar: POST `/api/permission-requests` con `{"permiso":4}` o 3 | Todos los Administradores activos |
+| Solicitud aprobada | Otro Administrador: POST `/api/permission-requests/{id}/approve` | Solicitante, indicando aprobación y permiso aplicado |
+| Solicitud rechazada | Administrador: POST `/api/permission-requests/{id}/reject` con `{"motivoRechazo":"Motivo de prueba"}` | Solicitante, con motivo |
+| Reserva confirmada | Crear reserva con permiso aprobado y luego Administrador: POST `/api/reservas/{id}/confirmar` | Propietario de la reserva |
+
+Una operación rechazada no genera notificaciones. El negocio, la bandeja y su
+correo se guardan juntos. El correo opcional está habilitado inicialmente.
+
+| Operación propia | Petición |
+| --- | --- |
+| Bandeja y contador de no leídas | GET `/api/notificaciones` |
+| Marcar leída | PATCH `/api/notificaciones/{id}/leida`, sin cuerpo |
+| Consultar preferencia | GET `/api/notificaciones/preferencias` |
+| Cambiar preferencia | PUT `/api/notificaciones/preferencias` con `{"correoHabilitado":false}` o true |
+
+La bandeja devuelve `noLeidas` y `notificaciones`, con `leidaEn=null` para las
+nuevas. Marcar una propia devuelve 204 y repetir conserva su fecha. Una ajena
+o inexistente devuelve 404. El usuario no puede elegir otro propietario.
+Al desactivar correo, los eventos posteriores conservan la interna y no encolan
+su correo. No retira correos ya encolados. Activación y recuperación siguen
+encolando sus mensajes indispensables, independientemente de esta preferencia.
+
+### Cola de correo y reintentos
+
+El servicio hospedado envía en segundo plano, en lotes de hasta 20, y espera
+diez segundos después de cada ciclo. Cada envío tiene timeout de 20 segundos.
+**Máximo de tres intentos totales por mensaje**. Después queda Fallido y no se
+reintenta automáticamente. Los estados JSON son Pendiente=1, Enviado=2 y Fallido=3.
+
+El Administrador consulta GET `/api/correos?pagina=1` (100 por página), con
+`total`, `pagina` y `correos`. Incluye identificador, destinatario, estado,
+intentos, creación, último intento, envío y último error sanitizado. Excluye el
+cuerpo del mensaje. Estándar recibe 403 y sin sesión 401.
+
+También puede ejecutarse un lote independiente desde la consola del operador:
+
+```powershell
+docker compose exec -T api dotnet SISReservas.Api.dll --procesar-correos
+```
+
+Para comprobar los intentos de manera controlada en **un entorno de pruebas**:
+
+1. En PowerShell, desactiva temporalmente el despachador de esa composición.
+2. Detén Mailpit y provoca una reserva confirmada o solicitud nueva. La operación
+   termina correctamente y queda el correo pendiente.
+3. Ejecuta el lote anterior tres veces. Consulta la cola como Administrador y
+   comprueba tres intentos, Fallido y último error. La cuarta ejecución no lo cambia.
+4. Inicia Mailpit y restaura el despachador.
+
+```powershell
+$env:EmailDispatcher__Enabled='false'
+docker compose up -d --force-recreate api
+docker compose stop mailpit
+# Provocar el evento HTTP y ejecutar --procesar-correos tres veces.
+# Consultar GET /api/correos desde Swagger.
+docker compose start mailpit
+Remove-Item Env:EmailDispatcher__Enabled
+docker compose up -d --force-recreate api
+```
+
+Para comprobar ausencia de reenvío, mantén el despachador desactivado durante la
+prueba, genera un evento, ejecuta el procesador y verifica el mensaje recibido
+en Mailpit y el estado Enviado. Ejecútalo de nuevo y comprueba que no aparece otra
+entrega del mismo evento. Restaura el despachador al terminar.
+
+SQL Server reclama cada correo mediante UPDATE condicional y un identificador
+exclusivo. El reclamo vence a los dos minutos, permitiendo recuperar trabajos
+interrumpidos. Los intentos se registran antes del envío. No se comparte un
+DbContext entre procesadores. Si SMTP acepta y el proceso cae antes de registrar
+Enviado, al recuperar el reclamo puede repetirse la entrega. SMTP no permite
+garantizar entrega exactamente una vez en esa ventana. Los correos fallidos se
+conservan para consulta.
+
+## Reportes
+
+Ambos reportes requieren sesión. Administrador consulta información general,
+Estándar únicamente la propia. Sus DTO JSON contienen grupos y totales, sin
+devolver las entidades individuales.
+
+| Reporte | Endpoint | Pregunta y fecha utilizada |
+| --- | --- | --- |
+| Core | GET `/api/reportes/solicitudes?inicio=...&fin=...` | ¿Cuántas solicitudes se crearon por estado en el periodo? Filtra por CreadaEn. |
+| Reservas | GET `/api/reportes/reservas?inicio=...&fin=...` | ¿Qué espacios reciben más reservas y cuántas horas se reservan en cada uno? Filtra por intersección del intervalo. |
+
+Ejemplos de consulta, con fechas UTC y datos de ese periodo:
+
+```text
+GET /api/reportes/solicitudes?inicio=2026-11-01T00:00:00Z&fin=2026-12-01T00:00:00Z
+GET /api/reportes/reservas?inicio=2026-11-01T00:00:00Z&fin=2026-12-01T00:00:00Z
+```
+
+- Rango `[inicio, fin)`, UTC obligatorio, inicio anterior al fin y máximo diez años.
+  Un rango inválido devuelve 400.
+- Solicitudes devuelve `total` y `grupos` por estado real. Pendiente=1,
+  Aprobada=2, Rechazada=3 y Aplicada=4. El flujo normal de aprobación guarda
+  Aplicada cuando concede el permiso; Aprobada es un paso intermedio.
+- Reservas devuelve `totalReservas`, `totalHoras` y grupos por espacio/estado
+  con identificador, nombre, número de reservas y horas dentro del periodo.
+  Excluye Cancelada. Incluye Pendiente, Confirmada y Completada para representar
+  demanda vigente o realizada. Las horas son la suma de intersecciones por reserva.
+- Una reserva parcialmente solapada aporta solo las horas dentro del rango.
+  Las duraciones se calculan en segundos SQL y se convierten a horas.
+- Los grupos de reservas se ordenan por horas, cantidad de reservas y espacio.
+  Los totales resumen los grupos, no un listado de entidades.
+- Sin resultados se devuelve una lista vacía y totales cero.
+- Para probar el filtro, crea datos en dos periodos distintos y consulta ambos.
+  Un Estándar no recibe registros ajenos ni siquiera en los totales.
+- `GroupBy`, `Count` y `Sum/DateDiffSecond` se ejecutan en SQL Server.
+  La variante EF InMemory de pruebas usa una función de duración equivalente,
+  porque ese proveedor no implementa DateDiffSecond.
+
+El contexto delegado y los criterios previos se encuentran en [AGENTS.md](AGENTS.md)
+y [criterios de aceptación](docs/criterios-notificaciones-reportes.md).
+La verificación HTTP/SQL reproducible está en
+`tests/integracion/Validar-Practica5.ps1`, ejecutable con PowerShell 5.1 o posterior
+y Docker Desktop. Crea una copia aislada y volúmenes nuevos, usa exclusivamente
+configuración ficticia de .env.example y genera resultados sanitizados en una
+carpeta temporal. No utiliza el .env privado del proyecto principal.
+
+```powershell
+.\tests\integracion\Validar-Practica5.ps1
+```
+
 ## Persistencia
 
 - `sql-data` conserva usuarios, sesiones, tokens, cola de correo, permisos, reservas y metadatos de documentos.
@@ -211,7 +342,7 @@ Con .NET SDK 10, desde la raíz:
 dotnet test SISReservasEspacios.slnx
 ```
 
-La última ejecución comprobada antes de esta reorganización terminó con **159 aprobadas, 0 fallidas y 0 omitidas**. La compilación tuvo **0 errores y 0 advertencias**. La suite prueba reglas y servicios con bases EF InMemory y contiene pruebas SMTP de loopback. No exige iniciar la API ni disponer de SQL Server.
+La última ejecución comprobada antes de esta reorganización terminó con **177 aprobadas, 0 fallidas y 0 omitidas**. La compilación tuvo **0 errores y 0 advertencias**. La suite prueba reglas y servicios con bases EF InMemory y contiene pruebas SMTP de loopback. No exige iniciar la API ni disponer de SQL Server.
 
 La validación funcional anterior en una copia de trabajo aislada de Docker completó **114 comprobaciones**, incluidas **96 peticiones HTTP** y **31 combinaciones de ruta y método**. Incluyó correo recibido en Mailpit y persistencia tras down/up. Esa ejecución fue sobre una copia del trabajo, no un clon remoto. La consulta real a WeatherAPI se confirmó por separado. Estos resultados son anteriores a esta edición documental.
 
@@ -253,6 +384,7 @@ dotnet run --project backend/SISReservas.Api --launch-profile http
 | Práctica 2 | `practica-2`, defectos 1 a 6 | Pruebas y mutantes de permisos | [Defectos históricos](docs/entregas/guia-acumulada-practica-4.md#práctica-2-defectos-históricos-de-gestión-de-permisos) |
 | Práctica 3 | `practica-3`, defectos 1 a 4 | Reservas, estados e integración con permisos | [Defectos y evidencias](docs/entregas/guia-acumulada-practica-4.md#defectos) |
 | Práctica 4 | `practica-4` | Documentos, Docker, persistencia y WeatherAPI | [Guía publicada y evidencias acumuladas](docs/entregas/guia-acumulada-practica-4.md) |
+| Práctica 5 | Preparación local | Notificaciones, cola robusta y reportes | [Criterios](docs/criterios-notificaciones-reportes.md), [verificación](docs/verificacion-practica-5.md) |
 
 Los nombres completos de los mutantes son `practica-2-defecto-N` (N=1…6) y `practica-3-defecto-N` (N=1…4). Cada etiqueta conserva su versión evaluable. La guía archivada mantiene tablas detectoras, hashes, auditorías, evidencia SMTP y limitaciones de sus respectivas etapas. Sus afirmaciones históricas se interpretan en ese contexto.
 

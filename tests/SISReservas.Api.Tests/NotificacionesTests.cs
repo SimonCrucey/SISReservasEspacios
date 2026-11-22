@@ -10,6 +10,48 @@ namespace SISReservas.Api.Tests;
 public class NotificacionesTests
 {
     [Fact]
+    public async Task GuardadoFallido_NoDejaSolicitudNiNotificacionesYNoSeFiltranEnReintento()
+    {
+        // Arrange
+        using var datos = new TestDatabase();
+        var fallo = new FailingSaveChangesInterceptor();
+        var db = datos.CreateContext(fallo);
+        await TestData.AgregarUsuarioAsync(db, Rol.Administrador);
+        var usuario = await TestData.AgregarUsuarioAsync(db);
+        var servicio = TestData.CrearSolicitudService(db);
+        fallo.Fail = true;
+        // Act
+        var fallida = await servicio.CrearAsync(usuario.Id, new() { Permiso = Permiso.ReservarEspacios });
+        fallo.Fail = false;
+        await db.SaveChangesAsync();
+        // Assert
+        Assert.False(fallida.Exito);
+        var recarga = datos.CreateContext();
+        Assert.Empty(recarga.SolicitudesPermiso);
+        Assert.Empty(recarga.Notificaciones);
+        Assert.Empty(recarga.CorreosEnCola);
+    }
+
+    [Fact]
+    public async Task PreferenciaNoDeshabilitaCorreosDeSeguridad_YUsuarioInactivoNoConsulta()
+    {
+        // Arrange
+        using var datos = new TestDatabase();
+        var db = datos.CreateContext();
+        var usuario = await TestData.AgregarUsuarioAsync(db);
+        var servicio = new NotificacionService(db);
+        await servicio.PreferenciasAsync(usuario.Id, false);
+        // Act
+        await new EmailQueueService(db).QueueAsync(usuario.Id, usuario.Email, "Activación", "Seguridad");
+        usuario.Activo = false;
+        await db.SaveChangesAsync();
+        // Assert
+        Assert.Single(db.CorreosEnCola);
+        await Assert.ThrowsAsync<UnauthorizedAccessException>(() => servicio.ConsultarAsync(usuario.Id));
+        await Assert.ThrowsAsync<UnauthorizedAccessException>(() => servicio.PreferenciasAsync(usuario.Id, true));
+    }
+
+    [Fact]
     public async Task CrearSolicitud_NotificaSoloAdministradoresActivos_YPersisteAmbosCanales()
     {
         // Arrange
