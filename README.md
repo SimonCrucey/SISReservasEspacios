@@ -32,6 +32,13 @@ docker compose up --build
 
 Abre **http://localhost:5054/swagger**. El puerto se configura con `APP_PORT`. Compose espera el healthcheck de SQL y la API aplica las migraciones antes de atender peticiones. Mailpit arranca dentro de la red de Compose.
 
+El healthcheck comprueba el servidor, pero una base existente puede seguir
+recuperándose después de un reinicio. La API espera a que el catálogo configurado
+esté ONLINE y admita conexiones antes de migrar. Los sondeos no usan pool y el
+arranque tiene un máximo de 30 intentos, con pausas de dos segundos y errores SQL
+registrados sin credenciales. Si el catálogo no existe, EF lo crea y aplica las
+migraciones; nunca se sustituye el historial por `EnsureCreated`.
+
 En otra terminal puedes comprobar los servicios:
 
 ```powershell
