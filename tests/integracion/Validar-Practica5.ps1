@@ -409,6 +409,7 @@ try {
     $null=Api GET '/api/notificaciones' 401
     $bandeja=Api GET '/api/notificaciones' 200 $null $u
     Check 'Bandeja contiene permiso resuelto y reserva confirmada' ($bandeja.notificaciones.Count -ge 2)
+    Check 'Notificaciones JSON declaran UTC' ($bandeja.notificaciones[0].creadaEn -match 'Z$')
     $notificacion=$bandeja.notificaciones[0].id
     $null=Api PATCH "/api/notificaciones/$notificacion/leida" 404 $null $o
     $null=Api PATCH "/api/notificaciones/$notificacion/leida" 204 $null $u
@@ -431,6 +432,19 @@ try {
     $null=Api GET '/api/correos' 401
     $cola=Api GET '/api/correos' 200 $null $a
     Check 'Cola sin cuerpo ni tokens' ($cola.correos[0].PSObject.Properties.Name -notcontains 'cuerpo')
+    $correoUtc=$cola.correos[0]
+    Check 'Correos JSON declaran UTC' ($correoUtc.creadoEn -match 'Z$')
+    $fechaSql=(SqlLectura "SELECT CONVERT(varchar(33),CreadoEn,126) FROM CorreosEnCola WHERE Id='$($correoUtc.id)';").Trim()
+    $ticksSql=[DateTime]::Parse($fechaSql,[Globalization.CultureInfo]::InvariantCulture).Ticks
+    $fechaJson=[DateTime]::Parse($correoUtc.creadoEn,[Globalization.CultureInfo]::InvariantCulture,[Globalization.DateTimeStyles]::RoundtripKind)
+    Check 'UTC HTTP conserva ticks almacenados en SQL' ($fechaJson.Kind -eq [DateTimeKind]::Utc -and $fechaJson.Ticks -eq $ticksSql)
+    $solicitudesUtc=Api GET '/api/permission-requests/mine' 200 $null $u
+    Check 'Permisos JSON declaran UTC' ($solicitudesUtc[0].creadaEn -match 'Z$')
+    $reservasUtc=Api GET '/api/reservas/mine' 200 $null $u
+    Check 'Reservas JSON declaran UTC' ($reservasUtc[0].fechaInicio -match 'Z$' -and $reservasUtc[0].fechaFin -match 'Z$')
+    foreach($fechaInvalida in @(123,$null,'no-es-fecha',$inicio.ToString('s'))){
+        $null=Api POST '/api/reservas' 400 @{espacioId=$espacio;fechaInicio=$fechaInvalida;fechaFin=$fin.ToString('o')} $u
+    }
 
     # Datos deterministas de reporte. La misma reserva debe sumar una hora en el primer rango.
     $rango="?inicio=$([uri]::EscapeDataString($inicio.ToString('o')))&fin=$([uri]::EscapeDataString($fin.ToString('o')))"
@@ -439,6 +453,7 @@ try {
     $null=Api GET "/api/reportes/reservas$rango" 401
     $reporte=Api GET "/api/reportes/reservas$rango" 200 $null $u
     Check 'Reporte SQL horas de reservas' ($reporte.totalReservas -eq 1 -and [Math]::Abs($reporte.totalHoras-1) -lt 0.0001)
+    Check 'Limites de reporte JSON declaran UTC' ($reporte.inicio -match 'Z$' -and $reporte.fin -match 'Z$')
     # Regresión H-01: datetime2(7), fracciones almacenadas y ventanas parciales.
     $origenFraccion=$inicio.AddHours(2)
     $inicioFraccion=$origenFraccion.AddTicks(9000001)

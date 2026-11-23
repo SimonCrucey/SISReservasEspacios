@@ -3,11 +3,13 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.OpenApi;
 using SISReservas.Api.Data;
 using SISReservas.Api.Security;
+using SISReservas.Api.Serialization;
 using SISReservas.Api.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
-builder.Services.AddControllers();
+builder.Services.AddControllers().AddJsonOptions(options =>
+    options.JsonSerializerOptions.Converters.Add(new UtcDateTimeJsonConverter()));
 
 builder.Services
     .AddAuthentication("Session")

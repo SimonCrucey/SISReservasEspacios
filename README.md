@@ -37,8 +37,10 @@ terminado de recuperarse tras un reinicio. El arranque comprueba su estado y el
 acceso efectivo antes de migrar; un bloqueo de sesión en `master` serializa la
 creación y las migraciones entre instancias. La espera total está limitada a
 120 segundos, configurable mediante `Database__StartupTimeoutSeconds` (1–300).
-Solo se reintentan errores transitorios; credenciales inválidas, esquema
-incompatible o catálogo offline producen un error explícito. No se usa
+Los errores conocidos de credenciales en `master`, permisos de migración,
+esquema incompatible o catálogo offline producen un error explícito. El acceso
+al catálogo puede seguir indisponible después de autenticar en `master`; ese
+caso se espera hasta el límite, sin confundirlo con una contraseña inválida. No se usa
 `EnsureCreated`, ni se borra o recrea una base existente. Este mecanismo requiere
 permiso de conexión a `master` y los permisos de migración habituales.
 
@@ -168,6 +170,15 @@ Ejemplo de cuerpo. Ajusta el ID y las fechas a un espacio activo y un intervalo 
 ```
 
 El Estándar necesita ReservarEspacios aprobado para crear. Las fechas deben ser coherentes y el inicio anterior al fin. Las reservas Pendientes y Confirmadas bloquean los intervalos solapados. Los horarios adyacentes son válidos.
+
+Los instantes de correos (creación, envío e intento), notificaciones, permisos,
+reservas y límites de reportes se devuelven en ISO 8601 con UTC explícito (`Z`).
+SQL Server `datetime2` conserva los valores UTC pero no su identificador de zona;
+la serialización identifica esos valores sin desplazar sus ticks ni actualizar
+registros. Las fechas de calendario `DateOnly` y los contratos `DateTimeOffset`
+conservan su formato. Las entradas sin zona no se reinterpretan como UTC:
+siguen sujetas a las validaciones existentes. El cliente decide la zona de
+presentación; no debe sumar o restar horas manualmente.
 
 ### Máquina de estados
 
@@ -355,9 +366,15 @@ Con .NET SDK 10, desde la raíz:
 dotnet test SISReservasEspacios.slnx
 ```
 
-La última ejecución comprobada de Práctica 5, después de corregir H-01, terminó con **183 aprobadas, 0 fallidas y 0 omitidas**. La compilación tuvo **0 errores y 0 advertencias**. La suite prueba reglas y servicios con bases EF InMemory y contiene pruebas SMTP de loopback. No exige iniciar la API ni disponer de SQL Server.
+En la rama `fix/practica5-auditoria-final`, la última ejecución comprobada terminó con **207 aprobadas, 0 fallidas y 0 omitidas**, con **0 errores y 0 advertencias** de compilación. Incluye 15 casos nuevos de arranque y 9 de serialización y compatibilidad UTC. La etiqueta `practica-5` no se ha movido: su ejecución anterior tras H-01 fue de 183 pruebas. La suite prueba reglas y servicios con bases EF InMemory y contiene pruebas SMTP de loopback. No exige iniciar la API ni disponer de SQL Server. Estas ejecuciones no demuestran que se haya resuelto la intermitencia histórica de ConfiguracionCorreoTests.
 
 La validación funcional de Práctica 4 en una copia de trabajo aislada de Docker completó **114 comprobaciones**, incluidas **96 peticiones HTTP** y **31 combinaciones de ruta y método**. Incluyó correo recibido en Mailpit y persistencia tras down/up. Esa ejecución fue sobre una copia del trabajo, no un clon remoto. La consulta real a WeatherAPI se confirmó por separado. La verificación inicial de Práctica 5 desde un clon Git local completó 178 comprobaciones (139 HTTP). La regresión posterior de H-01, en una copia Docker aislada con SQL Server real, completó **188 comprobaciones (145 HTTP), 0 fallos y las 38 rutas/métodos cubiertos**, incluyendo precisión de fracciones de segundo. Detalles en [verificación de Práctica 5](docs/verificacion-practica-5.md).
+
+La corrección posterior de arranque y UTC, solo en `fix/practica5-auditoria-final`,
+pasó **243 comprobaciones, 172 peticiones HTTP y 38 rutas/métodos, sin fallos**.
+Incluye SQL Server real, recepción SMTP en Mailpit, entradas JSON inválidas con
+HTTP 400 y cinco ciclos down/up sobre los mismos volúmenes conservando datos.
+No se volvió a probar entrega a buzones externos ni WeatherAPI con una clave real.
 
 Para una revisión manual, usa Swagger y verifica registro/activación, login/logout, rechazo administrativo a Estándar, recuperación, aprobación/rechazo de permisos, reserva válida y transición prohibida. Prueba también Documentos y persistencia con dos cuentas para comprobar aislamiento.
 

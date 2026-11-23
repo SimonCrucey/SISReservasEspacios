@@ -180,3 +180,87 @@ Evidencia antes/después con la misma prueba HTTP y SQL Server real:
 Esta intervención corrige únicamente H-01. No corrige ni da por resueltos H-02,
 H-03 o H-04. La etiqueta practica-5 se actualiza únicamente en local tras validar;
 no se publica esta corrección.
+
+## Correcciones posteriores a la auditoría final (rama aislada)
+
+Estas verificaciones corresponden a `fix/practica5-auditoria-final`, creada desde
+`docs/mejora-restricciones-practica5` (`2abefb1`). No cambian la etiqueta
+`practica-5`, main ni frontend. Las conclusiones del apartado H-01 anterior
+describen aquella intervención, no el estado de esta corrección posterior.
+
+### Arranque SQL
+
+El healthcheck de master podía adelantarse a la recuperación del catálogo.
+El registro de la auditoría mostraba login rechazado con estado 38 y luego
+CREATE DATABASE/1801 para una base existente. Un CanConnect y un solo reintento
+no cubrían esa ventana. También se comprobó que ONLINE/HAS_DBACCESS no bastan
+para decidir que la recuperación terminó.
+
+DatabaseStartup espera estado y conexión efectiva, con plazo total de 120 s
+(configurable entre 1 y 300), conexiones de sondeo sin pool y bloqueo de sesión
+en master que cubre creación y migraciones. No usa EnsureCreated. Las credenciales
+rechazadas en master, catálogos offline y errores conocidos de permisos/esquema
+fallan sin reintento. Un rechazo de acceso al catálogo después de autenticar
+en master se espera de forma acotada; SQL puede no distinguirlo de recuperación.
+
+- Quince casos xUnit nuevos: clasificación de errores, límites, catálogo omitido
+  y cancelación del host.
+- SQL Server real: dos arranques concurrentes sobre catálogo nuevo, siete
+  migraciones, contraseña ficticia inválida, catálogo nuevo offline y servidor
+  inaccesible con plazo de 2 s. Se conservaron los catálogos de prueba.
+- La ejecución `sisp5-e1dd2a04ba9945dc8261f741df275571` pasó 239 comprobaciones,
+  168 peticiones HTTP y 38 rutas/métodos. Los cinco ciclos down/up conservaron
+  preferencias, notificación leída, cola Fallida, reporte y documento idéntico.
+- Durante el desarrollo fallaron una prueba inicial de concurrencia y el tercer
+  reinicio por el sondeo HAS_DBACCESS; se corrigieron antes de la ejecución
+  completa citada. No se ocultaron esos fallos ni se borraron sus evidencias.
+
+### Instantes UTC y compatibilidad
+
+SQL datetime2 conserva ticks, pero EF devuelve DateTime con Kind Unspecified.
+La serialización predeterminada omitía Z. El convertidor de salida marca esos
+ticks como UTC sin desplazarlos. Incluye correos, notificaciones, permisos,
+reservas y límites de reportes. DateOnly conserva su fecha de calendario;
+DateTimeOffset conserva su zona y los nulos continúan siendo nulos. La entrada
+sin zona no se convierte implícitamente en UTC; los tipos y formatos inválidos
+generan JsonException para conservar el rechazo HTTP controlado.
+
+- Nueve casos xUnit nuevos: medianoche, cambio de mes, fracciones de 100 ns,
+  UTC/local, nulos, DateTimeOffset, DateOnly y entradas inválidas o sin zona.
+- Compilación: 0 errores y 0 advertencias. xUnit: 207 aprobadas, 0 fallidas,
+  0 omitidas. Estas aprobaciones no demuestran que se haya resuelto la
+  intermitencia anterior de ConfiguracionCorreoTests; no se modificó esa prueba.
+- No se modificaron migraciones históricas. EF informa que no hay cambios de
+  modelo pendientes. No se actualizaron valores de fecha almacenados.
+
+### Ejecución final combinada
+
+El snapshot `sisp5-dae218ceb5b2486cb586a7b3a7d5667c` terminó con **243 PASS,
+0 FAIL, 172 peticiones HTTP y las 38 rutas/métodos cubiertos**. Se compararon
+los hashes del código y del script del snapshot con la rama de trabajo.
+La comparación de ticks SQL/HTTP y las respuestas con Z pasaron. Valores
+numéricos, nulos, mal formados y sin zona produjeron HTTP 400 al crear reservas.
+
+| Ciclo sobre los mismos volúmenes | API | Datos conservados |
+| --- | --- | --- |
+| 1 | HTTP 200 | Preferencia, notificación leída, cola Fallida, reporte y documento idéntico |
+| 2 | HTTP 200 | Los mismos cinco elementos |
+| 3 | HTTP 200 | Los mismos cinco elementos |
+| 4 | HTTP 200 | Los mismos cinco elementos |
+| 5 | HTTP 200 | Los mismos cinco elementos |
+
+Se verificaron los seis frentes literales: registro y activación desde correo
+recibido en Mailpit; login/logout y 403 para Estándar; recuperación desde código
+recibido; crear/aprobar/rechazar permisos y transición inválida; reserva válida
+y prohibida; documento idéntico tras down/up. También pasaron notificaciones,
+preferencias, tres intentos SMTP hasta Fallido y dos procesadores concurrentes
+sin duplicación observada. SMTP fue local, no entrega a buzones externos.
+WeatherAPI sin clave respondió el 503 esperado; no se repitió una consulta real
+al proveedor. Los procesos temporales se detuvieron conservando los volúmenes.
+
+Para repetir: `powershell.exe -NoProfile -ExecutionPolicy Bypass -File tests/integracion/Validar-Practica5.ps1`.
+El script usa datos ficticios, un snapshot temporal y volúmenes propios; excluye
+secretos y frontend/test-results. Solo copia .env.example, nunca lee el .env
+privado. Las evidencias JSON se conservan fuera de Git. No se borran volúmenes.
+Las redes de las ejecuciones fallidas de esta intervención se liberaron sin -v
+cuando Docker agotó sus subredes; las bases de prueba se conservaron.
