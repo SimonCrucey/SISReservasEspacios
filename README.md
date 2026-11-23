@@ -1,86 +1,193 @@
 # SISReservasEspacios
 
-Sistema de reservas de salones, canchas y equipos desarrollado para **Programación III · TDS-007 · ITLA · 2026-C-3**.
+Sistema académico de reservas de salones, canchas y equipos de **Programación III · TDS-007 · ITLA · 2026-C-3**. Integra Control de acceso, Gestión de permisos, Reservas, Documentos, planificación exterior, Notificaciones y Reportes.
 
-Incluye Control de acceso, Gestión de permisos, reservas con máquina de estados, documentos con autorización y planificación exterior mediante WeatherAPI. La última versión publicada es Práctica 4. Práctica 5 se prepara localmente para revisión. Práctica 4 corresponde a la etiqueta `practica-4`, commit `64125eb9c74ab5811edb47cfaabf88dc23f32ddb`.
+El objetivo es ejecutar y evaluar el backend con Docker Compose, sin instalar .NET ni SQL Server en el host. Swagger es la interfaz de evaluación; no se requiere frontend.
 
-## Tecnologías y arquitectura
+**Versión de esta guía.** Describe la integración de Práctica 5 en `integracion/practica5-main`, conservando el historial propio de `main`. La versión académica validada está publicada en [practica-5](https://github.com/SimonCrucey/SISReservasEspacios/tree/practica-5), commit `0b887deaa22e61de44ca91b2e83e99d2feadb033`. La incorporación de esta integración a `main` y su publicación requieren aprobación; la etiqueta permanece intacta.
 
-- C# y ASP.NET Core Web API sobre .NET 10.
-- Entity Framework Core y SQL Server 2022.
-- Docker Compose, con SQL Server y API comunicados por la red interna.
-- Swagger para consultar contratos y ejecutar operaciones.
-- Sesiones con token Bearer y roles Administrador/Estándar.
-- Cola de correo en SQL, despachador SMTP y Mailpit para captura local.
-- WeatherAPI para recomendaciones de uso de canchas exteriores.
-- xUnit y EF InMemory para pruebas de servicios y reglas.
+## Funcionalidades principales
 
-La API usa controladores, DTO, servicios y un DbContext. Las reglas de transición de Reservas están centralizadas en `TransicionesReserva`. Los archivos se almacenan fuera de SQL y sus metadatos se guardan en la base.
+- Registro con activación por correo, sesiones Bearer, roles, bloqueo temporal y recuperación de contraseñas.
+- Solicitudes de permisos con aprobación/rechazo y concesión efectiva.
+- Reservas con disponibilidad, autorización, prevención de solapamientos y máquina de estados.
+- Documentos con subida, listado, descarga autorizada y eliminación lógica.
+- Planificación exterior mediante WeatherAPI.
+- Bandejas de notificaciones propias, preferencias y correo en cola con reintentos.
+- Reportes agregados de solicitudes y reservas, filtrados por usuario y periodo.
+
+## Stack y estructura
+
+C# y ASP.NET Core **.NET 10**, EF Core SQL Server **10.0.12**, SQL Server **2022**, Swagger/Swashbuckle, Docker Compose, SMTP/Mailpit y xUnit **2.9.3**. Las versiones de paquetes están en [API](backend/SISReservas.Api/SISReservas.Api.csproj) y [pruebas](tests/SISReservas.Api.Tests/SISReservas.Api.Tests.csproj).
+
+```text
+backend/SISReservas.Api/
+  Controllers/     HTTP y autorización
+  DTOs/            Contratos de entrada/salida
+  Services/        Acceso, Correo, Permisos, Reservas, Documentos, Notificaciones, Reportes
+  Models/          Entidades y enums
+  Data/            DbContext y arranque SQL
+  Migrations/      Siete migraciones, diseñadores y snapshot EF
+  Security/        Sesiones y credenciales
+  Serialization/   Convención JSON de instantes UTC
+  Properties/      Perfiles de ejecución
+tests/
+  SISReservas.Api.Tests/   Suite xUnit
+  integracion/            Validación HTTP/SQL/SMTP aislada
+docs/                     Criterios, evidencias y entregas anteriores
+```
+
+Las transiciones de Reservas se definen en `TransicionesReserva`. SQL conserva los metadatos de documentos; sus archivos se guardan en disco.
+
+## Requisitos previos
+
+| Camino | Requisitos en el host |
+| --- | --- |
+| Aplicación con Docker | Git, Docker Desktop iniciado en modo contenedores Linux y Docker Compose v2; conexión para descargar imágenes y restaurar paquetes en el primer build. SQL Server requiere arquitectura compatible con su imagen x86-64 y recursos disponibles. |
+| Suite xUnit | .NET SDK 10 y acceso a NuGet para restaurar paquetes; no requiere API, SQL Server ni Docker iniciados. Las pruebas SMTP de loopback necesitan puertos locales disponibles. |
+| Integración completa | Windows PowerShell 5.1 o posterior, Git y Docker Desktop con Compose v2, espacio, memoria y subredes disponibles para un proyecto aislado. No necesita .NET instalado en el host en modo Docker. |
+| Desarrollo sin contenedores para API/SQL | .NET SDK 10, SQL Server o LocalDB instalado y una instancia SMTP accesible para los flujos de correo. Véase [Desarrollo local](#desarrollo-local-con-visual-studio-y-localdb). |
+
+No se requieren Node.js, React ni una instalación local de EF CLI para el arranque Docker. No hay cuentas preconfiguradas con contraseñas compartidas.
 
 ## Inicio rápido con Docker
 
-Requiere Git, Docker Desktop con contenedores Linux y Compose. La imagen de SQL Server necesita un equipo compatible y recursos suficientes. Docker realiza la compilación y ejecuta SQL Server.
-
-Desde PowerShell:
+**Directorio:** ejecuta el clon desde una carpeta donde puedas crear el repositorio. Después, todos los comandos de esta guía parten de la **raíz `SISReservasEspacios`**, salvo indicación expresa.
 
 ```powershell
 git clone https://github.com/SimonCrucey/SISReservasEspacios.git
 cd SISReservasEspacios
+```
+
+Para reproducir la entrega académica publicada, selecciona su etiqueta:
+
+```powershell
+git checkout practica-5
+git rev-parse HEAD
+```
+
+El hash esperado de esa etiqueta es `0b887deaa22e61de44ca91b2e83e99d2feadb033`. Para validar esta integración local, conserva la rama `integracion/practica5-main` en lugar de cambiar de referencia.
+
+En un clon nuevo de la versión correcta:
+
+```powershell
 Copy-Item .env.example .env
 docker compose up --build
 ```
 
-Abre **http://localhost:5054/swagger**. El puerto se configura con `APP_PORT`. Compose espera el healthcheck de SQL y la API aplica las migraciones antes de atender peticiones. Mailpit arranca dentro de la red de Compose.
-
-El healthcheck comprueba el servidor, pero una base existente puede seguir
-recuperándose después de un reinicio. La API espera a que el catálogo configurado
-esté ONLINE y admita conexiones antes de migrar. Los sondeos no usan pool y el
-arranque tiene un máximo de 30 intentos, con pausas de dos segundos y errores SQL
-registrados sin credenciales. Si el catálogo no existe, EF lo crea y aplica las
-migraciones; nunca se sustituye el historial por `EnsureCreated`.
-
-En otra terminal puedes comprobar los servicios:
+No sobrescribas un `.env` privado existente. Los valores de demostración están en `.env.example`; no es necesaria una clave WeatherAPI para arrancar los demás módulos. Deja esta terminal abierta. En otra PowerShell situada en la misma raíz:
 
 ```powershell
 docker compose ps
 docker compose logs --tail=50 api
 ```
 
-Para detener y volver a iniciar conservando los datos:
+Espera SQL healthy y la API en ejecución. Abre **http://localhost:5054/swagger**; el documento de contratos es **http://localhost:5054/swagger/v1/swagger.json**. El sitio raíz `/` no es un endpoint de salud y puede devolver 404.
+
+| Servicio | Puerto dentro de Docker | Puerto del host en Compose principal |
+| --- | --- | --- |
+| `api` | HTTP 8080 | `127.0.0.1:5054`, configurable con `APP_PORT` |
+| `sqlserver` | SQL 1433 | Ninguno |
+| `mailpit` | SMTP 1025, HTTP 8025 | Ninguno |
+| `mail-inspector` | Cliente curl bajo demanda | Ninguno; no arranca con el up normal |
+
+La red interna usa los nombres `sqlserver` y `mailpit`. Desde el navegador del host solo se publica la API. Swagger está habilitado por `Development`; esta composición es para evaluación local, no un despliegue público.
+
+**Apagado y reinicio**, desde la misma raíz:
 
 ```powershell
 docker compose down
 docker compose up --build
 ```
 
-Después de cambiar variables de la API en `.env`, recrea su contenedor:
+No añadas `-v`. Se conservan los volúmenes; Mailpit no conserva su buzón tras recrear el contenedor. Para arrancar en segundo plano puede usarse `docker compose up -d --build`.
+
+## Variables de entorno
+
+[.env.example](.env.example) es la plantilla pública; `.env` es privado, está ignorado por Git y excluido del contexto Docker. No incluyas contraseñas, tokens, claves ni correos privados en commits o capturas. Las variables exportadas en PowerShell tienen prioridad sobre `.env` al interpolar Compose: evita valores heredados de otras pruebas.
+
+| Variable de la plantilla | Uso |
+| --- | --- |
+| `MSSQL_SA_PASSWORD` | Contraseña de la instalación SQL. El valor de la plantilla es público, únicamente para demostración local; usa uno privado en entornos compartidos. |
+| `APP_PORT` | Puerto del host para API y origen de enlaces; predeterminado 5054. |
+| `EmailDispatcher__Enabled` | `true` activa el despacho de la cola; `false` deja mensajes pendientes. |
+| `SMTP_HOST` / `SMTP_PORT` | En Compose: `mailpit` / `1025`. |
+| `SMTP_FROM` | Remitente del mensaje. |
+| `SMTP_ENABLE_SSL` / `SMTP_USE_AUTH` | STARTTLS y autenticación; ambos `false` con Mailpit local. |
+| `SMTP_USERNAME` / `SMTP_PASSWORD` | Solo si el servidor requiere autenticación; mantener privados. |
+| `WEATHER_API_KEY` | Clave personal para una consulta real a WeatherAPI; puede quedar vacía para evaluar los demás módulos. |
+| `WEATHER_LOCATION` | Ubicación del recinto; la plantilla usa coordenadas de Santo Domingo. |
+
+Compose fija además `ConnectionStrings__DefaultConnection` hacia `sqlserver,1433` y el catálogo `SISReservasEspacios`; `Database__ApplyMigrations=true`; `AppBaseUrl=http://localhost:APP_PORT` y `Documentos__Directorio=/app/data/documentos`.
+
+Después de editar variables de la API en `.env`, incluida `WEATHER_API_KEY`, desde la raíz:
 
 ```powershell
 docker compose up -d --force-recreate api
 ```
 
-Conserva las credenciales SQL del volumen existente. Cambiar la contraseña en `.env` no modifica automáticamente la contraseña de una instancia SQL ya inicializada.
+Cambiar `MSSQL_SA_PASSWORD` en la plantilla/entorno **no cambia la contraseña de un SQL Server ya inicializado**. Conserva la correspondiente al volumen existente. No intentes solucionar diferencias de credenciales borrando los datos.
 
-## Configuración
+`Database__StartupTimeoutSeconds` es una opción del proceso .NET (120 s por defecto, rango 1–300). El Compose principal no la reenvía desde `.env`; añadirla allí por sí solo no cambia el timeout. En desarrollo local puede establecerse en las variables del proceso.
 
-Copia `.env.example` antes del primer arranque. Sus valores públicos de demostración permiten iniciar el entorno local. La clave meteorológica queda vacía y debe configurarse para recibir un pronóstico real.
+## SQL Server y migraciones
 
-| Variable | Uso |
+La API aplica automáticamente las migraciones pendientes **antes de atender HTTP** cuando `Database:ApplyMigrations` está habilitado. No necesitas ejecutar `dotnet ef database update` para Compose.
+
+El healthcheck comprueba `master`; el catálogo de la aplicación puede seguir recuperándose. `DatabaseStartup` espera estado y acceso efectivo, con plazo total acotado y un bloqueo de sesión en `master` que serializa creación y migración entre instancias. Conserva el bloqueo propio de EF y no utiliza `EnsureCreated`. Requiere acceso a `master` y permisos de migración. Credenciales rechazadas en master, catálogo offline y errores conocidos de permisos/esquema fallan explícitamente. Un acceso al catálogo todavía indisponible tras autenticar en master se espera hasta el límite.
+
+Las siete migraciones versionadas en [Migrations](backend/SISReservas.Api/Migrations) se aplican en este orden:
+
+| Identificador | Alcance |
 | --- | --- |
-| `MSSQL_SA_PASSWORD` | Contraseña SQL de la instalación. El ejemplo es público y solo sirve para demostración local. |
-| `APP_PORT` | Puerto de la API en el host, por defecto 5054. |
-| `EmailDispatcher__Enabled` | Activa el despacho de correos en cola. |
-| `SMTP_HOST`, `SMTP_PORT`, `SMTP_FROM` | Servidor y remitente. En Compose se usa `mailpit:1025`. |
-| `SMTP_ENABLE_SSL`, `SMTP_USE_AUTH` | STARTTLS y autenticación del servidor SMTP. Mailpit local usa ambos en false. |
-| `SMTP_USERNAME`, `SMTP_PASSWORD` | Credenciales privadas si el servidor exige autenticación. |
-| `WEATHER_API_KEY` | Clave propia de WeatherAPI. |
-| `WEATHER_LOCATION` | Ubicación del recinto. El ejemplo usa coordenadas de Santo Domingo. |
+| `20261004141300_InitialAccessControl` | Usuarios, tokens de acceso y cola de correos. |
+| `20261004152153_AddSessions` | Sesiones. |
+| `20261019220956_AgregarGestionPermisos` | Solicitudes y permisos concedidos. |
+| `20261101193103_AgregarEspaciosYReservas` | Espacios, reservas, relaciones e índices. |
+| `20261109203709_AgregarDocumentos` | Metadatos de documentos. |
+| `20261122190020_AgregarNotificaciones` | Notificaciones y preferencia de correo del usuario. |
+| `20261122190414_AmpliarColaCorreos` | Intentos, error, reclamo temporal e índices de la cola. |
 
-Compose configura además `ConnectionStrings__DefaultConnection`, `Database__ApplyMigrations=true`, `AppBaseUrl` y `Documentos__Directorio=/app/data/documentos`.
+También están sus archivos Designer y el snapshot de EF; no deben editarse para reparar una base. Para consultar el historial, desde la raíz y sin exponer SQL al host:
 
-`.env` está ignorado por Git y excluido de la imagen. Guarda claves y credenciales privadas únicamente en el entorno o configuración local ignorada. La composición publicada es de evaluación local, expone la API en loopback y habilita Swagger mediante Development. Un despliegue público requiere configuración propia de HTTPS, secretos y SMTP.
+```powershell
+docker compose --% exec -T sqlserver sh -c "SQLCMDPASSWORD=$MSSQL_SA_PASSWORD; export SQLCMDPASSWORD; exec /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -C -b -d SISReservasEspacios -Q 'SELECT MigrationId FROM __EFMigrationsHistory ORDER BY MigrationId;'"
+```
 
-## Autenticación y correo
+En Windows PowerShell, `--%` evita expandir la variable antes de llegar al shell
+del contenedor; la contraseña permanece en su entorno y no se imprime. La
+consulta se pasa con `-Q`, sin tubería SQL por stdin: así no depende del BOM de
+la consola observado en PowerShell 5.1 y no requiere cambiar su codificación.
+
+En una inicialización completa se esperan los siete identificadores. No apliques estas comprobaciones contra bases ajenas. `docker-compose.dev.yml` es opcional y publica SQL en `127.0.0.1:14333`; **no es necesario para evaluar** ni se carga automáticamente. Si un operador necesita esa inspección local, debe usar explícitamente ambos archivos:
+
+```powershell
+docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --build
+```
+
+Al administrar esa variante, conserva los mismos argumentos `-f` y el mismo proyecto. No cambies credenciales ni archivos de migración para eludir un error de esquema.
+
+## SMTP y Mailpit
+
+Compose incluye Mailpit como destino de pruebas, sin autenticación, sin STARTTLS y sin puerto publicado al host. El despachador está registrado como servicio hospedado y habilitado por la plantilla. No hace falta un proveedor de correo externo para activar cuentas o recuperar contraseñas.
+
+Desde la raíz, lista los mensajes y consulta uno por ID:
+
+```powershell
+docker compose run --rm --no-deps mail-inspector -fsS http://mailpit:8025/api/v1/messages
+$mensajeId = Read-Host 'ID del mensaje nuevo mostrado en la lista'
+docker compose run --rm --no-deps mail-inspector -fsS "http://mailpit:8025/api/v1/message/$mensajeId"
+```
+
+El servicio explícito activa su perfil `inspeccion-correo` para esa ejecución y `--rm` elimina el contenedor auxiliar al terminar. No se crea un puerto público adicional. Revisa `Text` del mensaje; contiene el enlace de activación o el código de recuperación.
+
+Usa cuentas ficticias y mantén la salida en una terminal privada: contiene credenciales de un solo uso. **Pendiente** significa encolado; **Enviado** significa aceptación SMTP; observar el mensaje en Mailpit acredita recepción SMTP local, no entrega a un buzón externo. El despachador espera diez segundos entre ciclos; una fila en cola por sí sola no demuestra recepción.
+
+Habilitarlo procesa también correos antiguos pendientes del catálogo conectado. En pruebas utiliza un proyecto/base nuevos y un SMTP de captura; no dirijas una cola de datos reales a un destino de prueba. Los controles de reintento y el modo CLI están en [Cola de correo](#cola-de-correo-y-reintentos).
+
+## Autenticación, usuarios y roles
+
+Prepara dos cuentas ficticias distintas, Administrador y Estándar. Todas nacen Estándar; **no hay contraseña administrativa inicial**. Registra y activa ambas, promueve únicamente la cuenta elegida con el comando de operador indicado abajo y vuelve a iniciar sesión. En Swagger cambia el token en Authorize según el actor de cada operación.
 
 ### Registro, activación y sesión
 
@@ -93,17 +200,6 @@ En Swagger:
 5. Consulta `GET /api/auth/me` y cierra con `POST /api/auth/logout`. La sesión revocada recibe 401 al reutilizarse.
 
 Un HTTP 200 sin `sessionToken` en login puede indicar una cuenta inactiva o bloqueada. Para reenviar activación usa `POST /api/auth/resend-activation` con el correo como string JSON, por ejemplo `"persona@evaluacion.test.invalid"`. El reenvío invalida los enlaces anteriores.
-
-### Consultar mensajes en Mailpit
-
-Mailpit escucha en la red interna. El auxiliar `mail-inspector` permite consultar el buzón sin publicar otro puerto:
-
-```powershell
-docker compose run --rm --no-deps mail-inspector -fsS http://mailpit:8025/api/v1/messages
-docker compose run --rm --no-deps mail-inspector -fsS http://mailpit:8025/api/v1/message/ID
-```
-
-Sustituye `ID` por el identificador del mensaje nuevo. Su texto contiene el enlace de activación o el código de recuperación. Conserva ese contenido en una terminal privada. El log de aceptación SMTP y el mensaje recibido son evidencias distintas. Al habilitar el despachador también se procesan los mensajes pendientes del catálogo conectado.
 
 ### Primer Administrador
 
@@ -121,8 +217,6 @@ Sustituye el correo por el de la cuenta activada. El comando rechaza ejecutarse 
 - Lee el código recibido y ejecuta `POST /api/passwords/reset` con `token` y `nuevaPassword`. El código dura 30 minutos y se consume una sola vez.
 - Con sesión, `POST /api/passwords/change` recibe `passwordActual` y `nuevaPassword`.
 - Un Administrador puede solicitar `POST /api/passwords/{id}/force-reset`. El destinatario completa el restablecimiento mediante el correo.
-
-## Funcionalidades
 
 ### Gestión de usuarios
 
@@ -145,6 +239,12 @@ Un Estándar solicita permisos con `POST /api/permission-requests`. Los valores 
 
 La aprobación concede el permiso. Una segunda resolución o una transición inválida recibe 409. La resolución propia está prohibida. La guía detallada de RF-GP-01 a 07 se conserva en la documentación histórica.
 
+Para solicitar ReservarEspacios, el cuerpo es `{"permiso":4}`. Conserva el `id` devuelto para aprobar/rechazar desde la otra cuenta. Un Estándar no debe resolver solicitudes; comprueba HTTP 403 en `GET /api/permission-requests/pending`. Usa Swagger para completar los cuerpos según sus contratos reales.
+
+## Reservas, documentos y WeatherAPI
+
+Estas funcionalidades de prácticas anteriores se conservan y permiten provocar los eventos de Práctica 5. El comando de primer Administrador crea una cancha solo si no existen espacios; no hay un endpoint de administración de espacios en esta versión.
+
 ### Reservas y disponibilidad
 
 Todas las operaciones HTTP requieren sesión y rol válido.
@@ -158,13 +258,28 @@ Todas las operaciones HTTP requieren sesión y rol válido.
 | Confirmar | `POST /api/reservas/{id}/confirmar`, Administrador |
 | Cancelar | `POST /api/reservas/{id}/cancelar`, propietario o Administrador |
 
-Ejemplo de cuerpo. Ajusta el ID y las fechas a un espacio activo y un intervalo futuro:
+Desde la raíz, genera un cuerpo con un intervalo futuro UTC y pégalo en Swagger.
+Sustituye `1` por el ID de un espacio activo del listado:
 
-```json
-{"espacioId":1,"fechaInicio":"2027-01-20T14:00:00Z","fechaFin":"2027-01-20T15:00:00Z"}
+```powershell
+$inicioReserva = [DateTime]::UtcNow.AddDays(1)
+@{
+    espacioId = 1
+    fechaInicio = $inicioReserva.ToString('o')
+    fechaFin = $inicioReserva.AddHours(1).ToString('o')
+} | ConvertTo-Json
 ```
 
 El Estándar necesita ReservarEspacios aprobado para crear. Las fechas deben ser coherentes y el inicio anterior al fin. Las reservas Pendientes y Confirmadas bloquean los intervalos solapados. Los horarios adyacentes son válidos.
+
+Los instantes de correos (creación, envío e intento), notificaciones, permisos,
+reservas y límites de reportes se devuelven en ISO 8601 con UTC explícito (`Z`).
+SQL Server `datetime2` conserva los valores UTC pero no su identificador de zona;
+la serialización identifica esos valores sin desplazar sus ticks ni actualizar
+registros. Las fechas de calendario `DateOnly` y los contratos `DateTimeOffset`
+conservan su formato. Las entradas sin zona no se reinterpretan como UTC:
+siguen sujetas a las validaciones existentes. El cliente decide la zona de
+presentación; no debe sumar o restar horas manualmente.
 
 ### Máquina de estados
 
@@ -201,7 +316,9 @@ Ejemplo comprobado mediante proveedor simulado:
 
 También se comprobó una consulta real del endpoint en Docker con una clave autorizada. Las pruebas simuladas cubren éxito, lluvia, clave ausente o rechazada, HTTP 503, timeout y datos incompletos. La ausencia de clave o fallo del proveedor produce HTTP 503 controlado y las demás operaciones siguen disponibles. La clave se obtiene del entorno y se suprimen los logs de URLs del proveedor.
 
-## Notificaciones
+## Práctica 5: notificaciones y reportes
+
+### Notificaciones
 
 Práctica 5 añade una bandeja persistente y reutiliza la cola SMTP existente.
 Todas las rutas requieren una sesión Bearer válida. Los Administradores destinatarios
@@ -231,7 +348,7 @@ Al desactivar correo, los eventos posteriores conservan la interna y no encolan
 su correo. No retira correos ya encolados. Activación y recuperación siguen
 encolando sus mensajes indispensables, independientemente de esta preferencia.
 
-### Cola de correo y reintentos
+#### Cola de correo y reintentos
 
 El servicio hospedado envía en segundo plano, en lotes de hasta 20, y espera
 diez segundos después de cada ciclo. Cada envío tiene timeout de 20 segundos.
@@ -259,13 +376,14 @@ Para comprobar los intentos de manera controlada en **un entorno de pruebas**:
 4. Inicia Mailpit y restaura el despachador.
 
 ```powershell
+$despachoAnterior = [Environment]::GetEnvironmentVariable('EmailDispatcher__Enabled', 'Process')
 $env:EmailDispatcher__Enabled='false'
 docker compose up -d --force-recreate api
 docker compose stop mailpit
 # Provocar el evento HTTP y ejecutar --procesar-correos tres veces.
 # Consultar GET /api/correos desde Swagger.
 docker compose start mailpit
-Remove-Item Env:EmailDispatcher__Enabled
+[Environment]::SetEnvironmentVariable('EmailDispatcher__Enabled', $despachoAnterior, 'Process')
 docker compose up -d --force-recreate api
 ```
 
@@ -282,7 +400,7 @@ Enviado, al recuperar el reclamo puede repetirse la entrega. SMTP no permite
 garantizar entrega exactamente una vez en esa ventana. Los correos fallidos se
 conservan para consulta.
 
-## Reportes
+### Reportes
 
 Ambos reportes requieren sesión. Administrador consulta información general,
 Estándar únicamente la propia. Sus DTO JSON contienen grupos y totales, sin
@@ -293,14 +411,16 @@ devolver las entidades individuales.
 | Core | GET `/api/reportes/solicitudes?inicio=...&fin=...` | ¿Cuántas solicitudes se crearon por estado en el periodo? Filtra por CreadaEn. |
 | Reservas | GET `/api/reportes/reservas?inicio=...&fin=...` | ¿Qué espacios reciben más reservas y cuántas horas se reservan en cada uno? Filtra por intersección del intervalo. |
 
-Ejemplos de consulta, con fechas UTC y datos de ese periodo:
+Ejemplos ilustrativos de rutas para Swagger, no comandos PowerShell. Sustituye
+los rangos por UTC que incluya las solicitudes creadas y el intervalo de las
+reservas de tu evaluación; las fechas siguientes no generan datos de prueba:
 
 ```text
 GET /api/reportes/solicitudes?inicio=2026-11-01T00:00:00Z&fin=2026-12-01T00:00:00Z
 GET /api/reportes/reservas?inicio=2026-11-01T00:00:00Z&fin=2026-12-01T00:00:00Z
 ```
 
-- Rango `[inicio, fin)`, UTC obligatorio, inicio anterior al fin y máximo diez años.
+- Rango `[inicio, fin)`, UTC obligatorio, inicio anterior al fin y máximo 3660 días.
   Un rango inválido devuelve 400.
 - Solicitudes devuelve `total` y `grupos` por estado real. Pendiente=1,
   Aprobada=2, Rechazada=3 y Aplicada=4. El flujo normal de aprobación guarda
@@ -323,68 +443,165 @@ GET /api/reportes/reservas?inicio=2026-11-01T00:00:00Z&fin=2026-12-01T00:00:00Z
   público `double` conserva su redondeo habitual de representación binaria.
   La variante EF InMemory calcula la misma diferencia mediante `DateTime.Ticks`.
 
-El contexto delegado y los criterios previos se encuentran en [AGENTS.md](AGENTS.md)
-y [criterios de aceptación](docs/criterios-notificaciones-reportes.md).
-La verificación HTTP/SQL reproducible está en
-`tests/integracion/Validar-Practica5.ps1`, ejecutable con PowerShell 5.1 o posterior
-y Docker Desktop. Crea una copia aislada y volúmenes nuevos, usa exclusivamente
-configuración ficticia de .env.example y genera resultados sanitizados en una
-carpeta temporal. No utiliza el .env privado del proyecto principal.
+### Recorrido manual mínimo
+
+Usa Swagger, la captura Mailpit y las dos cuentas activadas:
+
+1. Estándar crea una solicitud `{"permiso":4}`. Administrador revisa su bandeja, contador y correo recibido.
+2. Administrador aprueba la solicitud ajena. Estándar revisa la resolución y crea una reserva futura en un espacio activo; antes de aprobar el permiso, esa creación debe rechazarse.
+3. Administrador confirma la reserva. Su propietario verifica interna y correo. Repetir la confirmación debe rechazarse sin notificar de nuevo.
+4. Estándar marca una notificación propia leída, repite y comprueba que no cambia su fecha. Otra cuenta no puede marcarla.
+5. Estándar desactiva su preferencia, solicita otro permiso válido y Administrador lo rechaza con motivo. Debe conservarse la interna sin correo opcional nuevo. Restaurar la preferencia no envía retroactivamente ese correo.
+6. Administrador consulta la cola. Estándar debe recibir 403, y sin sesión 401.
+7. Consulta ambos reportes con rangos UTC que contengan las solicitudes recién creadas y el intervalo de las reservas. Los ejemplos de fechas son ilustrativos: ajusta las fechas al momento de evaluación. Compara Admin global y Estándar propio, otro rango y un rango vacío.
+8. Completa los seis frentes acumulados: registro/activación por cola SMTP; login/logout y 403; recuperación; permisos y transición inválida; reserva válida/prohibida; documento persistente tras down/up.
+
+Los criterios previos están en [AGENTS.md](AGENTS.md) y [criterios de aceptación](docs/criterios-notificaciones-reportes.md). La correspondencia entre requisitos, pruebas y resultados está en [verificación de Práctica 5](docs/verificacion-practica-5.md).
+
+## Pruebas automatizadas
+
+**Desde la raíz**, con .NET SDK 10:
 
 ```powershell
-.\tests\integracion\Validar-Practica5.ps1
-```
-
-## Persistencia
-
-- `sql-data` conserva usuarios, sesiones, tokens, cola de correo, permisos, reservas y metadatos de documentos.
-- `documentos-data` conserva los archivos físicos en `/app/data/documentos`.
-
-Para comprobarla, registra y activa una cuenta, inicia sesión y sube un archivo. Comprueba listado y descarga. Ejecuta `docker compose down` y luego `docker compose up --build` desde el mismo proyecto. Inicia sesión, lista el documento y compara la descarga con el original.
-
-**Evita `docker compose down -v`**, porque elimina los volúmenes. Conserva el nombre del proyecto Compose y las credenciales SQL para reutilizar los datos. El buzón de Mailpit no tiene un volumen persistente configurado.
-
-## Pruebas
-
-Con .NET SDK 10, desde la raíz:
-
-```powershell
+dotnet restore SISReservasEspacios.slnx
+dotnet build SISReservasEspacios.slnx
 dotnet test SISReservasEspacios.slnx
 ```
 
-La última ejecución comprobada de Práctica 5, después de corregir H-01, terminó con **183 aprobadas, 0 fallidas y 0 omitidas**. La compilación tuvo **0 errores y 0 advertencias**. La suite prueba reglas y servicios con bases EF InMemory y contiene pruebas SMTP de loopback. No exige iniciar la API ni disponer de SQL Server.
+El **comando único de suite** es `dotnet test SISReservasEspacios.slnx`; restaura y compila si hace falta. No levanta la API. Los proyectos de prueba usan EF InMemory y SMTP de loopback: no necesitan una base SQL, Docker, claves meteorológicas ni un SMTP externo. InMemory no sustituye las pruebas de SQL Server real.
 
-La validación funcional de Práctica 4 en una copia de trabajo aislada de Docker completó **114 comprobaciones**, incluidas **96 peticiones HTTP** y **31 combinaciones de ruta y método**. Incluyó correo recibido en Mailpit y persistencia tras down/up. Esa ejecución fue sobre una copia del trabajo, no un clon remoto. La consulta real a WeatherAPI se confirmó por separado. La verificación inicial de Práctica 5 desde un clon Git local completó 178 comprobaciones (139 HTTP). La regresión posterior de H-01, en una copia Docker aislada con SQL Server real, completó **188 comprobaciones (145 HTTP), 0 fallos y las 38 rutas/métodos cubiertos**, incluyendo precisión de fracciones de segundo. Detalles en [verificación de Práctica 5](docs/verificacion-practica-5.md).
+La auditoría del commit publicado `0b887deaa22e61de44ca91b2e83e99d2feadb033` obtuvo **207 aprobadas, 0 fallidas, 0 omitidas**, y build con **0 errores y 0 advertencias**. Incluye 15 casos de arranque y 9 de serialización/compatibilidad UTC. Los resultados de la integración local se registran por separado a continuación.
 
-Para una revisión manual, usa Swagger y verifica registro/activación, login/logout, rechazo administrativo a Estándar, recuperación, aprobación/rechazo de permisos, reserva válida y transición prohibida. Prueba también Documentos y persistencia con dos cuentas para comprobar aislamiento.
+**Validación nueva de la integración (23/11/2026).** En `integracion/practica5-main`, `dotnet restore` terminó correctamente; la compilación tuvo **0 errores y 0 advertencias**, y la suite xUnit obtuvo **207 aprobadas, 0 fallidas y 0 omitidas**. El código integrado y las pruebas coinciden con `practica-5`; el merge conserva también el commit propio de `main`.
 
-## Desarrollo local
+Existe una intermitencia histórica en `ConfiguracionCorreoTests`. No se ha corregido ni se declara resuelta por una ejecución aprobada. Si reaparece, conserva el nombre de prueba, error y contexto; no elimines ni deshabilites pruebas para obtener una suite verde.
 
-Docker es el camino de evaluación. Para ejecución local se requieren .NET SDK 10, SQL Server o LocalDB y un servidor SMTP si se desea completar activación y recuperación.
+## Pruebas de integración
 
-La configuración base usa LocalDB y el perfil `http` usa `http://localhost:5054`. SQL de Docker y LocalDB son instancias diferentes. Sus cuentas, sesiones y colas son independientes. Antes de migrar una base existente, verifica la conexión y respalda sus datos.
+**Desde la raíz**, con Windows PowerShell 5.1 o posterior, Git y Docker Desktop iniciado:
 
-Configura `ConnectionStrings__DefaultConnection` para un catálogo nuevo y `Database__ApplyMigrations=true` para aplicar las migraciones al arrancar. Ajusta `AppBaseUrl`, `Documentos__Directorio` y las variables SMTP al entorno local. El `.env` de Compose no se carga automáticamente al ejecutar dotnet.
+Usa una terminal de pruebas sin una variable de proceso `MSSQL_SA_PASSWORD`
+heredada de otra instalación. El script espera la contraseña pública de la
+plantilla para sus sondas de arranque; una variable heredada tendría prioridad
+sobre esa plantilla y haría fallar la prueba. No imprimas su valor para revisarla.
 
 ```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\tests\integracion\Validar-Practica5.ps1
+```
+
+El bypass aplica únicamente al proceso de esa ejecución, no cambia la política global. No instales PowerShell 7 para ejecutar este script.
+
+El script versionado:
+
+- Comprueba Docker CLI/Compose y motor; crea un snapshot temporal y un proyecto `sisp5-<id>` con volúmenes nuevos.
+- Usa `.env.example`, sin leer el `.env` privado del proyecto. Incluye archivos de trabajo no ignorados; para una evaluación reproducible ejecútalo desde un clon limpio de la referencia aprobada.
+- Excluye `frontend/test-results/`; en la copia temporal mantiene un inspector de correo para evitar contenedores auxiliares repetidos.
+- Usa el puerto API 15094 si está disponible y selecciona otro libre si está ocupado; imprime el puerto y la carpeta de evidencia.
+- Ejecuta HTTP contra SQL Server real y recepción Mailpit, errores de arranque, dos migradores concurrentes, reportes, roles, preferencias, reintentos y procesadores SMTP concurrentes.
+- Repite cinco ciclos down/up con la misma base/volúmenes, verificando datos y contenido de documentos.
+- Escribe `resultados.json` y, al completar el recorrido, `cobertura.json`, además de registros de diagnóstico. Un archivo de resultados parciales no significa que la suite completa pasó.
+- Conserva sus recursos Docker al terminar. No detiene automáticamente los contenedores Docker ni elimina los volúmenes; la limpieza es una decisión del operador.
+
+No es requisito ejecutar el modo opcional `-Local` ni `-ProbarWeatherReal` para esta regresión. Por defecto prueba el rechazo controlado de WeatherAPI sin clave; una consulta real al proveedor requiere una clave privada y cobertura horaria válida.
+
+La auditoría del commit publicado `0b887deaa22e61de44ca91b2e83e99d2feadb033` pasó **243 comprobaciones, 172 peticiones HTTP y 38 rutas/métodos, sin fallos**. Su recorrido guiado adicional ejecutó **127 peticiones HTTP**; verificó siete migraciones y cinco ciclos automatizados de persistencia. Incluyó recepción SMTP local y los seis frentes acumulados; no demuestra entrega a buzones externos. El detalle y la evolución histórica de resultados están en [la evidencia documentada](docs/verificacion-practica-5.md). Estos resultados corresponden a la versión validada de Práctica 5; las comprobaciones nuevas de esta integración se identifican por separado.
+
+**Validación nueva de la integración (23/11/2026).** El script completo ejecutado con Windows PowerShell 5.1 terminó con código 0: **243 comprobaciones aprobadas, 0 fallidas, 172 peticiones HTTP y 38/38 rutas/métodos cubiertos**. Se verificaron las siete migraciones, Swagger HTTP 200, recepción SMTP local, reintentos y concurrencia, precisión de reportes, UTC y **cinco ciclos de persistencia**. La consulta de migraciones de esta guía también se ejecutó literalmente en PowerShell 5.1 contra ese SQL aislado y devolvió siete filas con código 0. El proyecto de prueba fue `sisp5-19cfdf3d38954d04985037fd594e98fb`; sus resultados y cobertura quedaron en la carpeta temporal que imprimió el script, sin incorporarse a Git. No se repitió el recorrido guiado histórico de 127 peticiones ni una consulta con clave real a WeatherAPI; tampoco se afirma entrega SMTP externa.
+
+Para detener exclusivamente una ejecución de integración, sustituye estas variables por los valores que **imprimió esa misma ejecución** y verifica su identidad antes:
+
+```powershell
+$proyectoPrueba = Read-Host 'Nombre exacto sisp5-... de esta ejecución'
+$carpetaPrueba = Read-Host 'Ruta completa de evidencia de esa misma ejecución'
+docker compose -p $proyectoPrueba --env-file "$carpetaPrueba/.env" -f "$carpetaPrueba/docker-compose.yml" ps
+docker compose -p $proyectoPrueba --env-file "$carpetaPrueba/.env" -f "$carpetaPrueba/docker-compose.yml" stop
+```
+
+No uses comandos globales de prune ni borres volúmenes para liberar espacio. Un fallo por subredes agotadas exige revisar los proyectos temporales, sin eliminar recursos del proyecto principal.
+
+## Persistencia de datos
+
+| Volumen | Contenido |
+| --- | --- |
+| `sql-data` | Usuarios, sesiones, tokens, cola, permisos, reservas, notificaciones y metadatos de documentos. |
+| `documentos-data` | Archivos físicos en `/app/data/documentos`. |
+
+**Comprobación manual desde la raíz del proyecto evaluado:**
+
+1. Registra/activa una cuenta, inicia sesión y sube un archivo; conserva su ID, tamaño y contenido original.
+2. Consulta listado y descarga. Crea una reserva y conserva su ID; marca una notificación propia leída.
+3. Ejecuta `docker compose down` y luego `docker compose up --build`, sin `-v`, conservando carpeta/proyecto Compose y credenciales SQL.
+4. Inicia sesión de nuevo; consulta las reservas propias y la notificación, lista el documento y compara la descarga con el original.
+
+La ejecución anterior verificó los cinco ciclos: API HTTP 200 y conservación de preferencias, notificación leída, cola Fallida, reporte y documento idéntico en cada uno. La validación de la rama integrada se informa por separado; no se atribuyen automáticamente a ella los resultados anteriores.
+
+La eliminación lógica de documentos conserva registro y archivo. El buzón Mailpit no tiene volumen persistente y puede vaciarse al recrearse; eso no implica pérdida de los datos SQL. No cambies el nombre del proyecto Compose si deseas reutilizar sus volúmenes.
+
+## Desarrollo local con Visual Studio y LocalDB
+
+Este camino es independiente de Docker: las cuentas, sesiones y colas de LocalDB no son las del contenedor. La evaluación recomendada usa Compose. El `.env` de Compose **no se carga** al ejecutar `dotnet run`.
+
+Requiere SDK 10, LocalDB instalado y la instancia `MSSQLLocalDB` disponible. En Visual Studio usa un IDE compatible con `net10.0`; no se presupone soporte nativo en Visual Studio 2022. Puedes usar su terminal integrada con el SDK 10 instalado. Selecciona el perfil `http` si ejecutas desde un IDE compatible; no uses el perfil Container para este camino.
+
+**Desde la raíz, en la misma terminal PowerShell que iniciará la API**, este ejemplo elige un catálogo nuevo con identificador único y no reutiliza bases existentes:
+
+```powershell
+$baseLocal = 'SISReservas_Local_' + [guid]::NewGuid().ToString('N')
+$env:ConnectionStrings__DefaultConnection = "Server=(localdb)\MSSQLLocalDB;Database=$baseLocal;Trusted_Connection=True;TrustServerCertificate=True;"
+$env:Database__ApplyMigrations = 'true'
+$env:AppBaseUrl = 'http://localhost:5054'
+$env:Documentos__Directorio = Join-Path $env:LOCALAPPDATA "SISReservasEspacios\$baseLocal\documentos"
+$env:EmailDispatcher__Enabled = 'false'
 dotnet run --project backend/SISReservas.Api --launch-profile http
 ```
 
-.NET 10 requiere Visual Studio 2026 18.0 o posterior para soporte del IDE. En Visual Studio 2022 se puede utilizar la terminal integrada con el SDK instalado. La [guía acumulada](docs/entregas/guia-acumulada-practica-4.md) conserva los procedimientos extensos de LocalDB y acceso SQL de desarrollo. El archivo opcional `docker-compose.dev.yml` publica SQL en loopback para inspección local. La composición principal mantiene SQL interno.
+Anota `$baseLocal` para reutilizar esa base después; volver a generar el GUID crea otra distinta. Swagger abre en http://localhost:5054/swagger. Con despacho deshabilitado **no puedes completar activación/recuperación por correo**. Las variables de terminal no se heredan retroactivamente por un Visual Studio ya abierto.
 
-## Errores comunes
+Para correo local se necesita un servidor SMTP de captura disponible. Opcionalmente, **solo en este camino local**, puede usarse Mailpit independiente con puertos loopback. Desde otra terminal en la raíz y sin ejecutar simultáneamente otro contenedor con ese nombre/puertos:
+
+```powershell
+docker run --rm --name sisreservas-mailpit-local-p5 -p 127.0.0.1:8025:8025 -p 127.0.0.1:1025:1025 axllent/mailpit:v1.33.0
+```
+
+Tras detener la API local con Ctrl+C, en su terminal configura y vuelve a arrancar:
+
+```powershell
+$env:SMTP_HOST = '127.0.0.1'
+$env:SMTP_PORT = '1025'
+$env:SMTP_FROM = 'reservas@test.invalid'
+$env:SMTP_ENABLE_SSL = 'false'
+$env:SMTP_USE_AUTH = 'false'
+$env:EmailDispatcher__Enabled = 'true'
+dotnet run --project backend/SISReservas.Api --launch-profile http
+```
+
+Consulta el buzón local en http://localhost:8025 y ejecuta los mismos flujos de Swagger. Esta captura opcional requiere Docker; si deseas prescindir de él por completo, proporciona un SMTP instalado por el operador y configura sus datos privados. No se instala ningún servidor desde esta guía. Usa Ctrl+C para detener los procesos iniciados en sus terminales.
+
+Las variables `$env:...` son de la terminal actual: no modifican configuración global. Al cerrar esa terminal dejan de aplicarse a procesos nuevos. No guardes secretos en `launchSettings.json`. Los procedimientos largos anteriores están archivados en [la guía acumulada](docs/entregas/guia-acumulada-practica-4.md); sus rutas y pendientes reflejan su etapa histórica.
+
+## Solución de problemas
 
 | Síntoma | Comprobación |
 | --- | --- |
-| Puerto 5054 ocupado | Cambia `APP_PORT` en `.env` y vuelve a levantar Compose. Usa el nuevo puerto en Swagger. |
-| SQL no pasa a healthy | Revisa `docker compose logs sqlserver`, recursos de Docker y credenciales del volumen existente. |
-| Swagger aún no responde | Espera la inicialización y revisa `docker compose logs api`. Comprueba puerto y migraciones. |
-| No llega el correo | Confirma que el despachador está habilitado y consulta el mensaje nuevo en Mailpit. |
-| Enlace de activación rechazado | Usa el último mensaje. Reenviar invalida el enlace anterior. Verifica que accedes a la API de la misma base. |
-| HTTP 401/403 | Comprueba token vigente, rol y permiso concedido. |
-| WeatherAPI devuelve 503 | Comprueba clave, cuota, ubicación y que el intervalo esté cubierto por el pronóstico. |
+| Clon sin las correcciones | Comprueba referencia y hash. La etiqueta publicada `practica-5` debe apuntar al commit `0b887deaa22e61de44ca91b2e83e99d2feadb033`. |
+| Puerto 5054 ocupado | Cambia `APP_PORT` en el entorno privado, recrea la API y usa el puerto nuevo en Swagger y enlaces. |
+| SQL no pasa a healthy | Revisa `docker compose logs --tail=50 sqlserver`, recursos y contraseña del volumen. No borres datos. |
+| Error 1801, catálogo offline o timeout de migración | Revisa referencia de código y `docker compose logs --tail=50 api`. El arranque corregido espera recuperación; errores permanentes requieren intervención. No reemplaces migraciones por EnsureCreated. |
+| `/` devuelve 404 | Usa `/swagger` o `/swagger/v1/swagger.json`; la raíz no es comprobación de salud. |
+| No aparece un correo | Comprueba despachador habilitado, destino SMTP, estado/intentos como Admin y mensaje nuevo en Mailpit. Un correo Fallido no se reenvía automáticamente. |
+| Activación rechazada | Usa el último enlace, antes de su vencimiento y en la API del mismo catálogo; el reenvío invalida los anteriores. |
+| Login 200 sin sesión | Puede ser cuenta inactiva o bloqueada; inspecciona mensaje y activa la cuenta o espera el bloqueo. No equivale a login exitoso. |
+| HTTP 401 / 403 / 404 | Sesión ausente/revocada / falta de rol o permiso / recurso inexistente o ajeno protegido. |
+| HTTP 400 en fechas | Usa ISO 8601 UTC con Z, inicio anterior al fin y rangos admitidos. |
+| WeatherAPI 503 | Clave, cuota, cobertura del pronóstico o proveedor; tras cambiar la clave recrea la API. |
+| Integración falla por redes/subredes agotadas | Identifica proyectos de prueba propios antes de detener/liberar sus contenedores/redes; conserva volúmenes. No ejecutes limpieza global. |
+| ConfiguracionCorreoTests intermitente | Conserva el fallo y compáralo con la limitación conocida; no se considera corregido ni se oculta. |
 
-## Historial de entregas
+El protocolo SMTP no comparte transacción con SQL: si el servidor acepta el mensaje y el proceso cae antes de guardar Enviado, puede repetirse al recuperar el reclamo. No se garantiza entrega exactamente una vez. La composición Development/HTTP no sustituye una configuración de producción con HTTPS y secretos seguros.
+
+## Documentación complementaria e historial
+
+Para el comportamiento actual prioriza este README, [criterios de Práctica 5](docs/criterios-notificaciones-reportes.md) y [verificación de Práctica 5](docs/verificacion-practica-5.md). La máquina de estados sigue vigente. Las guías de fases y el archivo acumulado conservan evidencias históricas: sus frases de SMTP pendiente o ausencia de reclamos distribuidos no describen la implementación actual.
 
 | Entrega | Etiqueta Git | Funcionalidades | Documentación |
 | --- | --- | --- | --- |
@@ -394,11 +611,11 @@ dotnet run --project backend/SISReservas.Api --launch-profile http
 | Práctica 2 | `practica-2`, defectos 1 a 6 | Pruebas y mutantes de permisos | [Defectos históricos](docs/entregas/guia-acumulada-practica-4.md#práctica-2-defectos-históricos-de-gestión-de-permisos) |
 | Práctica 3 | `practica-3`, defectos 1 a 4 | Reservas, estados e integración con permisos | [Defectos y evidencias](docs/entregas/guia-acumulada-practica-4.md#defectos) |
 | Práctica 4 | `practica-4` | Documentos, Docker, persistencia y WeatherAPI | [Guía publicada y evidencias acumuladas](docs/entregas/guia-acumulada-practica-4.md) |
-| Práctica 5 | practica-5 (local, sin publicar) | Notificaciones, cola robusta y reportes | [Criterios](docs/criterios-notificaciones-reportes.md), [verificación](docs/verificacion-practica-5.md) |
+| Práctica 5 | [`practica-5`](https://github.com/SimonCrucey/SISReservasEspacios/tree/practica-5) (publicada) | Notificaciones, cola robusta y reportes | [Criterios](docs/criterios-notificaciones-reportes.md), [verificación](docs/verificacion-practica-5.md) |
 
 Los nombres completos de los mutantes son `practica-2-defecto-N` (N=1…6) y `practica-3-defecto-N` (N=1…4). Cada etiqueta conserva su versión evaluable. La guía archivada mantiene tablas detectoras, hashes, auditorías, evidencia SMTP y limitaciones de sus respectivas etapas. Sus afirmaciones históricas se interpretan en ese contexto.
 
-## Documentación adicional
+La referencia histórica de Práctica 4 es `64125eb9c74ab5811edb47cfaabf88dc23f32ddb`.
 
 - [Máquina de estados y cobertura](docs/maquina-de-estados.md).
 - [Control de acceso y SMTP local](docs/control-acceso-local.md).

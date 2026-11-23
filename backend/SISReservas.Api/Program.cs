@@ -3,11 +3,13 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.OpenApi;
 using SISReservas.Api.Data;
 using SISReservas.Api.Security;
+using SISReservas.Api.Serialization;
 using SISReservas.Api.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
-builder.Services.AddControllers();
+builder.Services.AddControllers().AddJsonOptions(options =>
+    options.JsonSerializerOptions.Converters.Add(new UtcDateTimeJsonConverter()));
 
 builder.Services
     .AddAuthentication("Session")
@@ -73,7 +75,8 @@ if (app.Configuration.GetValue<bool>("Database:ApplyMigrations"))
     var database = scope.ServiceProvider.GetRequiredService<SISReservasDbContext>();
     var cancellationToken = app.Lifetime.ApplicationStopping;
 
-    await DatabaseStartup.MigrateAsync(database, app.Logger, cancellationToken);
+    await DatabaseStartup.MigrateAsync(database, app.Logger, cancellationToken,
+        app.Configuration.GetValue("Database:StartupTimeoutSeconds", 120));
 }
 
 var adminArgument = Array.IndexOf(args, "--administrador-inicial");

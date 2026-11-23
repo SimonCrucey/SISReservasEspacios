@@ -44,7 +44,7 @@ function ResolverEjecutable([string]$nombre) {
     }
     throw "No se encontró el ejecutable '$busqueda'. Comprueba su instalación y PATH. Para Docker, abre Docker Desktop y una nueva ventana de PowerShell."
 }
-function EjecutarProceso([string]$ejecutable, [string[]]$argumentos, [string]$entrada='', [string]$registro='proceso') {
+function EjecutarProceso([string]$ejecutable, [string[]]$argumentos, [string]$entrada='', [string]$registro='proceso', [switch]$DevolverResultado) {
     # Process evita que stderr se convierta en NativeCommandError en Windows PowerShell.
     # Escapado de argv para procesos Windows, sin pasar por cmd.exe ni evaluar comandos.
     $citados = foreach($argumento in $argumentos){
@@ -76,9 +76,10 @@ function EjecutarProceso([string]$ejecutable, [string[]]$argumentos, [string]$en
         $texto = $salida.GetAwaiter().GetResult()
         $diagnostico = $errores.GetAwaiter().GetResult()
         [IO.File]::AppendAllText("$evidencia/$registro.stderr", $diagnostico)
+        if($DevolverResultado){return [pscustomobject]@{Codigo=$proceso.ExitCode;Salida=$texto;Error=$diagnostico}}
         if($proceso.ExitCode -ne 0){
             if ($registro -ne 'buzon') { [IO.File]::WriteAllText("$evidencia/$registro.stdout", $texto) }
-            throw "$ejecutable $($argumentos -join ' ') terminó con código $($proceso.ExitCode). Revisa $evidencia/$registro.stderr"
+            throw "$ejecutable terminó con código $($proceso.ExitCode) durante '$registro'. Revisa $evidencia/$registro.stderr"
         }
         return $texto
     } finally { $proceso.Dispose() }
@@ -86,6 +87,47 @@ function EjecutarProceso([string]$ejecutable, [string[]]$argumentos, [string]$en
 function Compose([string[]]$comandos, [string]$entrada='', [string]$registro='compose') {
     if($comandos[0] -in @('up','down')){Write-Host "Docker Compose $($comandos[0]): esperando al proyecto aislado $proyecto..."}
     EjecutarProceso 'docker' (@('compose','-p',$proyecto,'--env-file',"$evidencia/.env",'-f',"$evidencia/docker-compose.yml") + $comandos) $entrada $registro
+}
+function ProbarArranqueSql {
+    # Solo el proyecto desechable de esta ejecución; nunca usa .env del operador.
+    $demo=[IO.File]::ReadAllText("$evidencia/.env.example")
+    $claveDemo=[regex]::Match($demo,'(?m)^MSSQL_SA_PASSWORD=(.+)\r?$').Groups[1].Value.Trim()
+    if(!$claveDemo){throw 'Falta la contraseña ficticia de .env.example'}
+    $catalogo="SISStartup_$id"
+    $conexion="Server=sqlserver;Database=$catalogo;User Id=sa;Password=$claveDemo;TrustServerCertificate=True;"
+    $prefijo=@('compose','-p',$proyecto,'--env-file',"$evidencia/.env",'-f',"$evidencia/docker-compose.yml")
+    $configProceso=@{Exe=(ResolverEjecutable 'docker');Argumentos=($prefijo+@('exec','-T','-e',"ConnectionStrings__DefaultConnection=$conexion",'api','dotnet','SISReservas.Api.dll','--procesar-correos'))}
+    $trabajos=@()
+    try {
+        foreach($n in 1..2){
+            $trabajos+=Start-Job -ScriptBlock {
+                param($config)
+                $ErrorActionPreference='Continue'
+                $argumentos=$config.Argumentos
+                & $config.Exe @argumentos 2>&1 | Out-Null
+                if($LASTEXITCODE -ne 0){throw 'Arranque concurrente fallo'}
+            } -ArgumentList $configProceso
+        }
+        $null=$trabajos | Wait-Job -Timeout 150
+        Check 'Dos arranques concurrentes completan un catalogo nuevo' (@($trabajos | Where-Object State -ne Completed).Count -eq 0)
+        $trabajos | Receive-Job -ErrorAction Stop | Out-Null
+    }finally{
+        foreach($trabajo in $trabajos){if($trabajo.State -eq 'Running'){Stop-Job $trabajo};Remove-Job $trabajo}
+    }
+    $sql='exec /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P "$MSSQL_SA_PASSWORD" -C -d "$1" -Q "SET NOCOUNT ON; SELECT COUNT(*) FROM __EFMigrationsHistory;" -h -1 -W -b'
+    Check 'Catalogo nuevo contiene las siete migraciones' ((Compose @('exec','-T','sqlserver','sh','-c',$sql,'sh',$catalogo)) -match '^\s*7')
+    $invalida=$conexion.Replace("Password=$claveDemo;","Password=$([guid]::NewGuid().ToString('N'));")
+    $reloj=[Diagnostics.Stopwatch]::StartNew()
+    $r=EjecutarProceso 'docker' ($prefijo+@('exec','-T','-e',"ConnectionStrings__DefaultConnection=$invalida",'api','dotnet','SISReservas.Api.dll','--procesar-correos')) '' 'sql-permanente' -DevolverResultado
+    Check 'Credenciales invalidas fallan sin reintento' ($r.Codigo -ne 0 -and ($r.Salida+$r.Error) -match 'permanente.*18456' -and ($r.Salida+$r.Error) -notmatch 'Arranque SQL pendiente' -and $reloj.Elapsed.TotalSeconds -lt 15)
+    $offline="SISOffline_$id"
+    $null=SqlLectura "CREATE DATABASE [$offline]; ALTER DATABASE [$offline] SET OFFLINE;"
+    $r=EjecutarProceso 'docker' ($prefijo+@('exec','-T','-e',"ConnectionStrings__DefaultConnection=$($conexion.Replace($catalogo,$offline))",'api','dotnet','SISReservas.Api.dll','--procesar-correos')) '' 'sql-offline' -DevolverResultado
+    Check 'Catalogo offline requiere intervencion sin reintento' ($r.Codigo -ne 0 -and ($r.Salida+$r.Error) -match 'estado SQL 6' -and ($r.Salida+$r.Error) -notmatch 'Arranque SQL pendiente')
+    $reloj.Restart()
+    $sinServidor="Server=127.0.0.1,1;Database=PruebaTimeout;User Id=sa;Password=$claveDemo;TrustServerCertificate=True;"
+    $r=EjecutarProceso 'docker' ($prefijo+@('exec','-T','-e',"ConnectionStrings__DefaultConnection=$sinServidor",'-e','Database__StartupTimeoutSeconds=2','api','dotnet','SISReservas.Api.dll','--procesar-correos')) '' 'sql-timeout' -DevolverResultado
+    Check 'Espera de SQL inaccesible queda acotada' ($r.Codigo -ne 0 -and ($r.Salida+$r.Error) -match 'TimeoutException' -and $reloj.Elapsed.TotalSeconds -lt 15)
 }
 function Api($metodo, $ruta, $esperado, $cuerpo=$null, $token='', $form=$null) {
     $peticion=[Net.Http.HttpRequestMessage]::new([Net.Http.HttpMethod]::new($metodo),"http://localhost:$Puerto$ruta")
@@ -212,6 +254,7 @@ try {
         $archivos=EjecutarProceso 'git' @('-C',$raiz,'ls-files','--cached','--others','--exclude-standard') '' 'git'
         foreach($archivo in ($archivos -split '\r?\n' | Where-Object {$_} | Sort-Object -Unique)){
             if($archivo -match '(^|/)\.env($|\.)' -and $archivo -ne '.env.example'){continue}
+            if($archivo -match '^frontend/test-results/'){continue}
             $destino=Join-Path $evidencia $archivo
             [void](New-Item -ItemType Directory -Path (Split-Path $destino) -Force)
             Copy-Item -LiteralPath (Join-Path $raiz $archivo) -Destination $destino
@@ -231,6 +274,7 @@ try {
         $null=Compose @('up','-d','--build')
     }
     EsperarApi
+    if(!$Local){ProbarArranqueSql}
     $swagger=$http.GetStringAsync("http://localhost:$Puerto/swagger/v1/swagger.json").GetAwaiter().GetResult() | ConvertFrom-Json
     $clave='Prueba9'+[guid]::NewGuid().ToString('N')
     $nueva='Cambio8'+[guid]::NewGuid().ToString('N')
@@ -365,6 +409,7 @@ try {
     $null=Api GET '/api/notificaciones' 401
     $bandeja=Api GET '/api/notificaciones' 200 $null $u
     Check 'Bandeja contiene permiso resuelto y reserva confirmada' ($bandeja.notificaciones.Count -ge 2)
+    Check 'Notificaciones JSON declaran UTC' ($bandeja.notificaciones[0].creadaEn -match 'Z$')
     $notificacion=$bandeja.notificaciones[0].id
     $null=Api PATCH "/api/notificaciones/$notificacion/leida" 404 $null $o
     $null=Api PATCH "/api/notificaciones/$notificacion/leida" 204 $null $u
@@ -387,6 +432,19 @@ try {
     $null=Api GET '/api/correos' 401
     $cola=Api GET '/api/correos' 200 $null $a
     Check 'Cola sin cuerpo ni tokens' ($cola.correos[0].PSObject.Properties.Name -notcontains 'cuerpo')
+    $correoUtc=$cola.correos[0]
+    Check 'Correos JSON declaran UTC' ($correoUtc.creadoEn -match 'Z$')
+    $fechaSql=(SqlLectura "SELECT CONVERT(varchar(33),CreadoEn,126) FROM CorreosEnCola WHERE Id='$($correoUtc.id)';").Trim()
+    $ticksSql=[DateTime]::Parse($fechaSql,[Globalization.CultureInfo]::InvariantCulture).Ticks
+    $fechaJson=[DateTime]::Parse($correoUtc.creadoEn,[Globalization.CultureInfo]::InvariantCulture,[Globalization.DateTimeStyles]::RoundtripKind)
+    Check 'UTC HTTP conserva ticks almacenados en SQL' ($fechaJson.Kind -eq [DateTimeKind]::Utc -and $fechaJson.Ticks -eq $ticksSql)
+    $solicitudesUtc=Api GET '/api/permission-requests/mine' 200 $null $u
+    Check 'Permisos JSON declaran UTC' ($solicitudesUtc[0].creadaEn -match 'Z$')
+    $reservasUtc=Api GET '/api/reservas/mine' 200 $null $u
+    Check 'Reservas JSON declaran UTC' ($reservasUtc[0].fechaInicio -match 'Z$' -and $reservasUtc[0].fechaFin -match 'Z$')
+    foreach($fechaInvalida in @(123,$null,'no-es-fecha',$inicio.ToString('s'))){
+        $null=Api POST '/api/reservas' 400 @{espacioId=$espacio;fechaInicio=$fechaInvalida;fechaFin=$fin.ToString('o')} $u
+    }
 
     # Datos deterministas de reporte. La misma reserva debe sumar una hora en el primer rango.
     $rango="?inicio=$([uri]::EscapeDataString($inicio.ToString('o')))&fin=$([uri]::EscapeDataString($fin.ToString('o')))"
@@ -395,6 +453,7 @@ try {
     $null=Api GET "/api/reportes/reservas$rango" 401
     $reporte=Api GET "/api/reportes/reservas$rango" 200 $null $u
     Check 'Reporte SQL horas de reservas' ($reporte.totalReservas -eq 1 -and [Math]::Abs($reporte.totalHoras-1) -lt 0.0001)
+    Check 'Limites de reporte JSON declaran UTC' ($reporte.inicio -match 'Z$' -and $reporte.fin -match 'Z$')
     # Regresión H-01: datetime2(7), fracciones almacenadas y ventanas parciales.
     $origenFraccion=$inicio.AddHours(2)
     $inicioFraccion=$origenFraccion.AddTicks(9000001)
@@ -493,12 +552,15 @@ try {
         $null=Compose @('exec','-T','api','dotnet','SISReservas.Api.dll','--procesar-correos')
         Check 'Fallido no se reprocesa' (@((Api GET '/api/correos' 200 $null $a).correos | Where-Object id -eq $pendiente.id)[0].intentos -eq 3)
         $null=Compose @('start','mailpit')
-        $null=Compose @('down')
-        $null=Compose @('up','-d')
-        EsperarApi
-        Check 'Preferencia y notificacion sobreviven down/up' ((Api GET '/api/notificaciones/preferencias' 200 $null $u).correoHabilitado -and @((Api GET '/api/notificaciones' 200 $null $u).notificaciones | Where-Object { $_.id -eq $notificacion -and $_.leidaEn }).Count -eq 1)
-        Check 'Cola Fallida persiste tras down/up' (@((Api GET '/api/correos' 200 $null $a).correos | Where-Object id -eq $pendiente.id)[0].estado -eq 3)
-        Check 'Reporte SQL persiste tras down/up' ((Api GET "/api/reportes/reservas$rango" 200 $null $u).totalReservas -eq 1)
+        foreach($ciclo in 1..5){
+            $null=Compose @('down')
+            $null=Compose @('up','-d')
+            EsperarApi
+            Check "Ciclo ${ciclo}: preferencia y notificacion persisten" ((Api GET '/api/notificaciones/preferencias' 200 $null $u).correoHabilitado -and @((Api GET '/api/notificaciones' 200 $null $u).notificaciones | Where-Object { $_.id -eq $notificacion -and $_.leidaEn }).Count -eq 1)
+            Check "Ciclo ${ciclo}: cola Fallida persiste" (@((Api GET '/api/correos' 200 $null $a).correos | Where-Object id -eq $pendiente.id)[0].estado -eq 3)
+            Check "Ciclo ${ciclo}: reporte SQL persiste" ((Api GET "/api/reportes/reservas$rango" 200 $null $u).totalReservas -eq 1)
+            Check "Ciclo ${ciclo}: documento persiste" ((Api GET "/api/documentos/$($persistente.id)/descargar" 200 $null $u) -ceq [Convert]::ToBase64String([IO.File]::ReadAllBytes($archivo)))
+        }
     }
 
     $cobertura=foreach($p in $swagger.paths.PSObject.Properties){foreach($m in $p.Value.PSObject.Properties){
