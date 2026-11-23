@@ -151,9 +151,13 @@ Las siete migraciones versionadas en [Migrations](backend/SISReservas.Api/Migrat
 También están sus archivos Designer y el snapshot de EF; no deben editarse para reparar una base. Para consultar el historial, desde la raíz y sin exponer SQL al host:
 
 ```powershell
-'SELECT MigrationId FROM __EFMigrationsHistory ORDER BY MigrationId;' |
-    docker compose exec -T sqlserver sh -c 'SQLCMDPASSWORD=$MSSQL_SA_PASSWORD; export SQLCMDPASSWORD; exec /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -C -b -d SISReservasEspacios'
+docker compose --% exec -T sqlserver sh -c "SQLCMDPASSWORD=$MSSQL_SA_PASSWORD; export SQLCMDPASSWORD; exec /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -C -b -d SISReservasEspacios -Q 'SELECT MigrationId FROM __EFMigrationsHistory ORDER BY MigrationId;'"
 ```
+
+En Windows PowerShell, `--%` evita expandir la variable antes de llegar al shell
+del contenedor; la contraseña permanece en su entorno y no se imprime. La
+consulta se pasa con `-Q`, sin tubería SQL por stdin: así no depende del BOM de
+la consola observado en PowerShell 5.1 y no requiere cambiar su codificación.
 
 En una inicialización completa se esperan los siete identificadores. No apliques estas comprobaciones contra bases ajenas. `docker-compose.dev.yml` es opcional y publica SQL en `127.0.0.1:14333`; **no es necesario para evaluar** ni se carga automáticamente. Si un operador necesita esa inspección local, debe usar explícitamente ambos archivos:
 
