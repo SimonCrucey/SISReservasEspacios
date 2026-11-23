@@ -35,3 +35,11 @@ desde el cliente para modificar bandejas o preferencias.
 - Documentar endpoints, reintentos, filtros y evidencias realmente ejecutadas.
 - El commit de criterios debe preceder a cualquier commit de implementación de Práctica 5.
 - El panel HTML y scripts internos siguen fuera de la entrega.
+- No modificar autenticación, registro, activación, sesiones, recuperación de contraseñas ni roles, salvo integración estrictamente necesaria.
+- No alterar las reglas de negocio existentes de permisos, reservas y documentos.
+- No modificar ni eliminar migraciones históricas de Entity Framework Core.
+- No introducir cambios incompatibles en los endpoints existentes.
+- No eliminar, deshabilitar ni modificar pruebas para ocultar fallos.
+- No modificar etiquetas académicas ni reescribir el historial Git.
+- No modificar módulos ajenos a las funcionalidades delegadas salvo necesidad justificada.
+- Toda modificación excepcional debe ser mínima, justificarse y documentarse, y acompañarse de pruebas de regresión.
