@@ -93,7 +93,7 @@ public static class DatabaseStartup
     {
         await using var command = server.CreateCommand();
         command.CommandTimeout = 5;
-        command.CommandText = "SELECT state, is_read_only, HAS_DBACCESS(name) FROM sys.databases WHERE name=@catalog";
+        command.CommandText = "SELECT state, is_read_only FROM sys.databases WHERE name=@catalog";
         command.Parameters.Add("@catalog", SqlDbType.NVarChar, 128).Value = target.InitialCatalog;
         await using var reader = await command.ExecuteReaderAsync(ct);
         if (!await reader.ReadAsync(ct)) return true; // EF crea únicamente catálogos inexistentes.
@@ -101,8 +101,6 @@ public static class DatabaseStartup
         if (state is 1 or 2) return false; // RESTORING / RECOVERING.
         if (state != 0 || reader.GetBoolean(1))
             throw new InvalidOperationException($"El catálogo no admite migraciones: estado SQL {state} o solo lectura. Requiere intervención del operador.");
-        var hasAccess = !reader.IsDBNull(2) && reader.GetInt32(2) == 1;
-        if (!hasAccess) throw new InvalidOperationException("El login no tiene acceso al catálogo. Comprueba permisos y disponibilidad administrativa.");
         await reader.CloseAsync();
         // ONLINE en sys.databases no basta: el catálogo debe aceptar el login.
         // No reconstruir desde server.ConnectionString: después de Open oculta Password.
@@ -110,8 +108,8 @@ public static class DatabaseStartup
         try { await connection.OpenAsync(ct); }
         catch (SqlException error) when (error.Number == 18456)
         {
-            // El mismo login ya autenticó en master y HAS_DBACCESS=1. Durante la
-            // recuperación aún puede fallar el acceso al catálogo (estado 38).
+            // El mismo login ya autenticó en master. ONLINE y HAS_DBACCESS no
+            // garantizan que la recuperación haya terminado (login estado 38).
             throw new CatalogNotReadyException();
         }
         return true;
