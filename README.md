@@ -32,6 +32,16 @@ docker compose up --build
 
 Abre **http://localhost:5054/swagger**. El puerto se configura con `APP_PORT`. Compose espera el healthcheck de SQL y la API aplica las migraciones antes de atender peticiones. Mailpit arranca dentro de la red de Compose.
 
+El healthcheck de `master` no garantiza que el catálogo de la aplicación haya
+terminado de recuperarse tras un reinicio. El arranque comprueba su estado y el
+acceso efectivo antes de migrar; un bloqueo de sesión en `master` serializa la
+creación y las migraciones entre instancias. La espera total está limitada a
+120 segundos, configurable mediante `Database__StartupTimeoutSeconds` (1–300).
+Solo se reintentan errores transitorios; credenciales inválidas, esquema
+incompatible o catálogo offline producen un error explícito. No se usa
+`EnsureCreated`, ni se borra o recrea una base existente. Este mecanismo requiere
+permiso de conexión a `master` y los permisos de migración habituales.
+
 En otra terminal puedes comprobar los servicios:
 
 ```powershell

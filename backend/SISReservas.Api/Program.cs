@@ -1,5 +1,4 @@
 using Microsoft.AspNetCore.Authentication;
-using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.OpenApi;
 using SISReservas.Api.Data;
@@ -74,22 +73,8 @@ if (app.Configuration.GetValue<bool>("Database:ApplyMigrations"))
     var database = scope.ServiceProvider.GetRequiredService<SISReservasDbContext>();
     var cancellationToken = app.Lifetime.ApplicationStopping;
 
-    try
-    {
-        await database.Database.MigrateAsync(cancellationToken);
-    }
-    catch (SqlException error) when (error.Number == 1801)
-    {
-        // EF comprueba y crea el catálogo antes de adquirir su bloqueo de migraciones.
-        // Otro proceso puede haberlo creado entre ambas operaciones.
-        if (!await database.Database.CanConnectAsync(cancellationToken))
-            throw new InvalidOperationException(
-                "SQL Server informa que la base configurada existe, pero la API no puede abrirla. " +
-                "Comprueba el estado del catálogo y los permisos de la conexión.", error);
-
-        app.Logger.LogWarning("La base configurada ya existe y admite conexiones. Se reintentan las migraciones una vez.");
-        await database.Database.MigrateAsync(cancellationToken);
-    }
+    await DatabaseStartup.MigrateAsync(database, app.Logger, cancellationToken,
+        app.Configuration.GetValue("Database:StartupTimeoutSeconds", 120));
 }
 
 var adminArgument = Array.IndexOf(args, "--administrador-inicial");
