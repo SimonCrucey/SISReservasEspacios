@@ -1,0 +1,45 @@
+{
+  "xunit": {
+    "aprobadas": 214,
+    "fallidas": 0,
+    "omitidas": 0
+  },
+  "coreReal": {
+    "comprobacionesAprobadas": 87,
+    "peticionesHTTP": 62,
+    "migraciones": 7,
+    "hostOriginal": true,
+    "sinTiposReservas": true,
+    "SMTPyRecuperacion": true,
+    "persistenciaTrasReinicio": true
+  },
+  "sistemaCompleto": {
+    "comprobacionesAprobadas": 248,
+    "peticionesHTTP": 173,
+    "rutasMetodos": 38,
+    "migraciones": 7,
+    "ciclosPersistencia": 5,
+    "seisFrentesAprobados": true
+  },
+  "h01SQL": {
+    "antesAmbasExitosas": true,
+    "antesFechaConservada": false,
+    "despuesAmbasExitosas": true,
+    "despuesFechaConservada": true,
+    "migracionesAntes": 7,
+    "migracionesDespues": 7
+  },
+  "h02": {
+    "pipelineDevuelve503": true,
+    "sinDatosSinteticosSensibles": true,
+    "reporteRecuperado200": true
+  },
+  "regresionesEnPadres": {
+    "H01": true,
+    "H02": true,
+    "H03": true
+  },
+  "publicado": false,
+  "etiquetaActualizada": false,
+  "privacidadEntrega": "Resumen histórico: solo valores numéricos, booleanos, fechas y referencias públicas de código; se omiten identificadores de filas y texto libre. Originales preservados en trabajo-asignacion-3."
+}

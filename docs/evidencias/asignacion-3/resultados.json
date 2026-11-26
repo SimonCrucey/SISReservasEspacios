@@ -1,0 +1,104 @@
+{
+  "fecha": "2026-11-26",
+  "baseAuditada": "0b887deaa22e61de44ca91b2e83e99d2feadb033",
+  "codigoCorregido": "85521d7128e6b09f96b45bf1df3e5a606a150fee",
+  "compilacion": {
+    "errores": 0,
+    "advertencias": 0
+  },
+  "xunit": {
+    "aprobadas": 212,
+    "fallidas": 0,
+    "omitidas": 0
+  },
+  "integracionCorregida": {
+    "comprobaciones": 243,
+    "aprobadas": 243,
+    "fallidas": 0,
+    "peticionesHTTP": 172,
+    "rutasMetodos": 38,
+    "cubiertas": 38,
+    "ciclosPersistencia": 5,
+    "migraciones": 7
+  },
+  "regresionesEnPadres": [
+    {
+      "Hallazgo": "H-01",
+      "Correccion": "750240acc1b9c3e8067317b265064dd0640d9a81",
+      "Padre": "0b887deaa22e61de44ca91b2e83e99d2feadb033",
+      "Antes": "FALLA",
+      "Despues": "PASA"
+    },
+    {
+      "Hallazgo": "H-02",
+      "Correccion": "012805bf7852631c6cd0fa4be9f078dbb3690293",
+      "Padre": "750240acc1b9c3e8067317b265064dd0640d9a81",
+      "Antes": "FALLA",
+      "Despues": "PASA"
+    },
+    {
+      "Hallazgo": "H-03",
+      "Correccion": "85521d7128e6b09f96b45bf1df3e5a606a150fee",
+      "Padre": "012805bf7852631c6cd0fa4be9f078dbb3690293",
+      "Antes": "FALLA",
+      "Despues": "PASA"
+    }
+  ],
+  "H01_SQL": {
+    "antes": {
+      "PrimeraFecha": "2026-11-26T19:32:48.6022003",
+      "SegundaFecha": "2026-11-26T19:32:48.720211",
+      "FechaConservada": false,
+      "AmbasOperacionesExitosas": true
+    },
+    "despues": {
+      "PrimeraFecha": "2026-11-26T19:51:42.8100322",
+      "SegundaFecha": "2026-11-26T19:51:42.8100322",
+      "FechaConservada": true,
+      "AmbasOperacionesExitosas": true
+    }
+  },
+  "H02_HTTP": {
+    "antes": {
+      "http": 500,
+      "segundos": 30.05,
+      "exponeSqlException": true,
+      "exponeTraza": true,
+      "exponeRuta": true,
+      "exponeTokenDeLaPropiaCuentaFicticia": true
+    },
+    "despues": {
+      "http": 503,
+      "segundos": 30.08,
+      "exponeSqlException": false,
+      "exponeTraza": false,
+      "exponeRuta": false,
+      "exponeTokenDeSesion": false,
+      "bloqueoExit": 0,
+      "casosControlados": [
+        {
+          "esperado": 400,
+          "obtenido": 400
+        },
+        {
+          "esperado": 400,
+          "obtenido": 400
+        },
+        {
+          "esperado": 200,
+          "obtenido": 200
+        }
+      ],
+      "correoActivacionRecibido": true
+    }
+  },
+  "H03": {},
+  "historialCredenciales": {
+    "Referencia": "practica-5",
+    "BlobsPublicosRevisados": 221,
+    "RutasEnvPrivadosEnHistoria": [],
+    "RutasConLiteralesPotencialesSinValores": []
+  },
+  "limites": [],
+  "privacidadEntrega": "Resumen histórico: solo valores numéricos, booleanos, fechas y referencias públicas de código; se omiten identificadores de filas y texto libre. Originales preservados en trabajo-asignacion-3."
+}

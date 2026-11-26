@@ -4,7 +4,7 @@ Sistema académico de reservas de salones, canchas y equipos de **Programación 
 
 El objetivo es ejecutar y evaluar el backend con Docker Compose, sin instalar .NET ni SQL Server en el host. Swagger es la interfaz de evaluación; no se requiere frontend.
 
-**Versión de esta guía.** Describe las correcciones preparadas en `fix/practica5-auditoria-final`. Al realizar esta revisión documental, la etiqueta local `practica-5` todavía señala la versión anterior; su actualización y publicación están pendientes de autorización. Un clon del `main` publicado no garantiza incluir estas correcciones. Los resultados citados son ejecuciones anteriores identificadas, no una nueva prueba de clon limpio.
+**Versión de esta guía.** Entrega consolidada de Asignación 3 en `entrega-asignacion-3`, basada en la Práctica 5 publicada. Tiene un commit por hallazgo y un cuarto de documentación. La sesión histórica y sus evidencias permanecen identificadas como tales. La etiqueta local `asignacion-3` todavía conserva `e8c18c4`: no se ha movido ni publicado. En la revisión local usar la rama de entrega; la selección de la etiqueta desde GitHub solo corresponde después de autorizar su actualización/publicación.
 
 ## Funcionalidades principales
 
@@ -62,7 +62,11 @@ cd SISReservasEspacios
 Antes de evaluar, selecciona la referencia que contenga la versión aprobada. **Solo después de que se publique la etiqueta corregida**, podrá seleccionarse así:
 
 ```powershell
-git checkout practica-5
+# Revisión previa: ejecutar desde un clon LOCAL del repositorio, sin depender de GitHub.
+# La rama entrega-asignacion-3 aún no se ha publicado.
+git checkout entrega-asignacion-3
+# Tras autorizar publicación de la entrega evaluable, seleccionar en su lugar:
+# git checkout asignacion-3
 git rev-parse HEAD
 ```
 
@@ -470,7 +474,9 @@ dotnet test SISReservasEspacios.slnx
 
 El **comando único de suite** es `dotnet test SISReservasEspacios.slnx`; restaura y compila si hace falta. No levanta la API. Los proyectos de prueba usan EF InMemory y SMTP de loopback: no necesitan una base SQL, Docker, claves meteorológicas ni un SMTP externo. InMemory no sustituye las pruebas de SQL Server real.
 
-La última ejecución comprobada de la rama corregida tuvo **207 aprobadas, 0 fallidas, 0 omitidas**, y build con **0 errores y 0 advertencias**. Incluye 15 casos nuevos de arranque y 9 de serialización/compatibilidad UTC. Estos resultados son anteriores a esta reorganización documental; **no se han vuelto a ejecutar en esta fase**.
+La base histórica de Práctica 5 pasó **207 pruebas**. El cierre inicial de Asignación 3 incorporó cinco casos: una prueba de lectura concurrente, dos casos de errores controlados y dos de independencia/modelo EF. Aquella ejecución inicial pasó **212 aprobadas, 0 fallidas y 0 omitidas**, con compilación **0 errores y 0 advertencias**. Los resultados se registran en la [evidencia de Asignación 3](docs/evidencias/asignacion-3/resultados.json). No se atribuyen al commit histórico resultados de otra versión.
+
+La prueba de independencia crea una copia temporal de fuentes, excluye Reservas y ejecuta piezas reales del Core con InMemory. Necesita SDK 10/NuGet; no inicia la API ni requiere SQL. Conserva su log en `Temp/SISReservas-H03-*`.
 
 Existe una intermitencia histórica en `ConfiguracionCorreoTests`. No se ha corregido ni se declara resuelta por una ejecución aprobada. Si reaparece, conserva el nombre de prueba, error y contexto; no elimines ni deshabilites pruebas para obtener una suite verde.
 
@@ -502,7 +508,7 @@ El script versionado:
 
 No es requisito ejecutar el modo opcional `-Local` ni `-ProbarWeatherReal` para esta regresión. Por defecto prueba el rechazo controlado de WeatherAPI sin clave; una consulta real al proveedor requiere una clave privada y cobertura horaria válida.
 
-La ejecución corregida anterior pasó **243 comprobaciones, 172 peticiones HTTP y 38 rutas/métodos, sin fallos**. Incluyó recepción SMTP local y los seis frentes acumulados; no demuestra entrega a buzones externos. El detalle y la evolución histórica de resultados están en [la evidencia documentada](docs/verificacion-practica-5.md). La auditoría de clon limpio de esta reorganización **todavía no se ejecutó**.
+La ejecución histórica de Práctica 5 pasó **243 comprobaciones, 172 peticiones HTTP y 38 rutas/métodos**. Asignación 3 repitió esta regresión por separado: **243 aprobadas, 0 fallidas, 172 peticiones HTTP, 38 rutas/métodos, siete migraciones y cinco ciclos de persistencia**; consultar la [evidencia actual](docs/evidencias/asignacion-3/resultados.json). La recepción SMTP local no demuestra entrega a buzones externos. La evolución anterior permanece en [verificación de Práctica 5](docs/verificacion-practica-5.md).
 
 Para detener exclusivamente una ejecución de integración, sustituye estas variables por los valores que **imprimió esa misma ejecución** y verifica su identidad antes:
 
@@ -607,7 +613,8 @@ Para el comportamiento actual prioriza este README, [criterios de Práctica 5](d
 | Práctica 2 | `practica-2`, defectos 1 a 6 | Pruebas y mutantes de permisos | [Defectos históricos](docs/entregas/guia-acumulada-practica-4.md#práctica-2-defectos-históricos-de-gestión-de-permisos) |
 | Práctica 3 | `practica-3`, defectos 1 a 4 | Reservas, estados e integración con permisos | [Defectos y evidencias](docs/entregas/guia-acumulada-practica-4.md#defectos) |
 | Práctica 4 | `practica-4` | Documentos, Docker, persistencia y WeatherAPI | [Guía publicada y evidencias acumuladas](docs/entregas/guia-acumulada-practica-4.md) |
-| Práctica 5 | practica-5 (local, sin publicar) | Notificaciones, cola robusta y reportes | [Criterios](docs/criterios-notificaciones-reportes.md), [verificación](docs/verificacion-practica-5.md) |
+| Práctica 5 | [practica-5 (publicada)](https://github.com/SimonCrucey/SISReservasEspacios/tree/practica-5) | Notificaciones, cola robusta y reportes | [Criterios](docs/criterios-notificaciones-reportes.md), [verificación](docs/verificacion-practica-5.md) |
+| Asignación 3 | `asignacion-3` (entrega local, sin publicar) | Auditoría y correcciones H-01, H-02 y H-03 | [Auditoría](docs/auditoria-asignacion-3.md), [bitácora](docs/bitacora-asignacion-3.md), [evidencia](docs/evidencias/asignacion-3/resultados.json) |
 
 Los nombres completos de los mutantes son `practica-2-defecto-N` (N=1…6) y `practica-3-defecto-N` (N=1…4). Cada etiqueta conserva su versión evaluable. La guía archivada mantiene tablas detectoras, hashes, auditorías, evidencia SMTP y limitaciones de sus respectivas etapas. Sus afirmaciones históricas se interpretan en ese contexto.
 
@@ -620,3 +627,95 @@ La referencia histórica de Práctica 4 es `64125eb9c74ab5811edb47cfaabf88dc23f3
 - [Verificación de fase 6](docs/verificacion-fase-6.md).
 - [Evidencia funcional HTTP/SQL de fase 6](docs/evidencia-fase-6.json).
 - [Archivo de entregas y procedimientos anteriores](docs/entregas/guia-acumulada-practica-4.md).
+
+## Asignación 3: auditoría y regresión por hallazgo
+
+- H-01: la lectura concurrente conserva la primera fecha persistida; UPDATE SQL atómico con propietario y LeidaEn NULL.
+- H-02: los fallos internos se controlan también en Development; indisponibilidad de persistencia devuelve 503 genérico, sin traza, SQL, rutas ni cabeceras. Los rechazos de negocio conservan sus códigos.
+- H-03: las extensiones de Reservas están en archivos parciales de su módulo; Core puede compilar y ejecutar permisos, bandeja y reporte de solicitudes sin incluir negocio. El modelo EF y las siete migraciones no cambian.
+
+Desde la raíz, además del comando único `dotnet test SISReservasEspacios.slnx`, se puede demostrar cada prueba sobre el padre de su corrección:
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\tests\integracion\Verificar-RegresionesAsignacion3.ps1
+```
+
+Requiere Git, Windows PowerShell 5.1 o posterior y SDK 10/NuGet. Exporta copias temporales, incorpora solo la prueba nueva, exige fallo anterior y aprobación actual; no cambia ramas, etiquetas ni bases. Los tres commits de corrección citan su hallazgo. La [bitácora](docs/bitacora-asignacion-3.md) registra qué se pidió, qué falló, por qué pasó y las mejoras visibles en AGENTS y criterios.
+
+La publicación de Asignación 3 sigue pendiente. El `git checkout asignacion-3` del inicio rápido corresponde a esa entrega y solo funcionará desde un clon remoto después de autorizar su publicación; en la preparación local usar el worktree `trabajo-asignacion-3`. No se requiere mover ninguna etiqueta anterior.
+
+## Revisión personal de Asignación 3: comprobación definitiva
+
+La [guía de revisión](docs/revision-personal-asignacion-3.md) sustituye el alcance limitado del CoreSmoke inicial: CoreOnly conserva Program.cs y las siete migraciones, excluye los tipos de Reservas y ejecuta el host real. H-01 dispone de SQL coordinado versionado; H-02 comprueba el pipeline real y recuperación.
+
+Desde la raíz, con Docker Desktop y PowerShell 5.1+:
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\tests\integracion\Validar-H01Sql.ps1
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\tests\integracion\Validar-Practica5.ps1 -CoreOnly
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\tests\integracion\Validar-Practica5.ps1
+```
+
+Cada ejecución crea datos/volúmenes propios a partir del ejemplo público. Si Docker tiene pools agotados o solapados, añadir `-SubredDocker` con un CIDR libre elegido por el operador; no es obligatorio ni existe una red universal fija. Para el arranque Compose manual se puede usar el overlay opcional `docker-compose.red-pruebas.yml` definiendo `DOCKER_TEST_SUBNET`. No eliminar redes ni volúmenes ajenos.
+
+El comando principal sigue siendo `dotnet test SISReservasEspacios.slnx`, sin API, SQL ni Docker. Las mejoras posteriores están en la rama candidata; `asignacion-3` y su respaldo conservan e8c18c4 hasta autorización. No evaluar las mejoras mediante esa etiqueta antigua todavía.
+
+Resultados de la revisión posterior: **214 xUnit aprobadas**, **87 comprobaciones / 62 HTTP en CoreOnly** y **248 comprobaciones / 173 HTTP en el sistema completo**, sin fallos; siete migraciones y cinco ciclos completos de persistencia. Son resultados nuevos de la rama candidata, no de la etiqueta antigua. [Evidencia de revisión](docs/evidencias/asignacion-3/revision-personal.json).
+
+## Historial consolidado de Asignación 3
+
+Los commits definitivos de corrección son `fcc3846` (H-01), `158b753` (H-02) y `35aedc0` (H-03), hijos consecutivos desde practica-5. Los hashes anteriores de la sesión se conservan como históricos, no como identificadores de la entrega consolidada. [Auditoría y referencias](docs/auditoria-asignacion-3.md).
+
+La rama de trabajo y los respaldos están intactos. El historial ya está consolidado; las menciones anteriores a consolidación pendiente pertenecen a la cronología de revisión. La etiqueta antigua no representa aún esta rama: no entregar su referencia hasta autorizar la actualización.
+
+El verificador RED/GREEN comprueba padre, corrección exacta y candidato final. El ejecutor SQL admite referencias explícitas:
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\tests\integracion\Validar-H01Sql.ps1 -Antes 0b887de -Despues fcc3846
+```
+
+### Arranque local de evaluación desde el clon de la entrega
+
+Desde la raíz, copiar únicamente el ejemplo público. Elegir un nombre de proyecto de prueba propio y un puerto libre. Estas variables solo afectan a la terminal actual.
+
+```powershell
+Copy-Item .env.example .env
+$env:COMPOSE_PROJECT_NAME='evaluacion-asig3'
+$env:APP_PORT='15150'
+$env:SMTP_HOST='mailpit'
+$env:SMTP_PORT='1025'
+$env:SMTP_USE_AUTH='false'
+$env:SMTP_ENABLE_SSL='false'
+$env:SMTP_FROM='reservas@test.invalid'
+$env:SMTP_USERNAME=''
+$env:SMTP_PASSWORD=''
+$env:EmailDispatcher__Enabled='true'
+docker compose -p evaluacion-asig3 up --build -d
+```
+
+Abrir `http://127.0.0.1:15150/swagger`. Si la red predeterminada no puede crearse, elegir una subred libre (sin solapar redes existentes) y ejecutar la alternativa versionada, usando el mismo proyecto:
+
+```powershell
+# Ejemplo de laboratorio: comprobar antes que ese CIDR esté libre.
+$env:DOCKER_TEST_SUBNET='10.251.74.0/24'
+docker compose -p evaluacion-asig3 -f docker-compose.yml -f docker-compose.red-pruebas.yml up --build -d
+```
+
+La subred es configurable y opcional, no un valor obligatorio. Al detener usar los mismos archivos Compose y `down` sin `-v`; no borrar volúmenes. Para CoreOnly añadir `-f docker-compose.core.yml`; no se sustituye Program.cs. Las instrucciones de cuentas, SMTP e inspección de correo descritas anteriormente siguen vigentes.
+
+### Clon local limpio antes de publicar
+
+Desde la raíz del repositorio local que contiene la rama consolidada, se puede revisar sin depender de GitHub ni cambiar la etiqueta:
+
+```powershell
+$origen=(Get-Location).Path
+$destino=Join-Path $env:TEMP ('asig3-evaluacion-'+[guid]::NewGuid().ToString('N'))
+git clone --no-hardlinks --branch entrega-asignacion-3 $origen $destino
+Set-Location $destino
+dotnet build SISReservasEspacios.slnx
+dotnet test SISReservasEspacios.slnx
+```
+
+Continuar allí con «Arranque local de evaluación desde el clon de la entrega» y los scripts versionados. `COMPOSE_PROJECT_NAME` hace que los comandos posteriores `docker compose exec` de esta guía utilicen el mismo proyecto aislado; el puerto y SMTP se configuran solo en esa terminal.
+
+**Verificación del historial consolidado:** se repitieron 214 xUnit, 248 comprobaciones integrales/173 HTTP y 87 CoreOnly/62 HTTP sin fallos sobre las correcciones definitivas. El verificador exige RED en cada padre y GREEN en su corrección exacta y candidato. [Referencias y resultados de entrega](docs/evidencias/asignacion-3/entrega-consolidada.json). Los resúmenes históricos omiten identificadores de filas y texto libre; sus originales siguen preservados en la rama de trabajo.

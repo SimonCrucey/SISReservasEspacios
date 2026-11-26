@@ -1,0 +1,37 @@
+{
+  "rama": "entrega-asignacion-3",
+  "correcciones": {
+    "H-01": {
+      "commit": "fcc384638f6f02ae33a9314805e9fc8461967e1c",
+      "padre": "0b887deaa22e61de44ca91b2e83e99d2feadb033"
+    },
+    "H-02": {
+      "commit": "158b75324606c1c60db4aeb09bee8656bb11f676",
+      "padre": "fcc384638f6f02ae33a9314805e9fc8461967e1c"
+    },
+    "H-03": {
+      "commit": "35aedc040ee7a549baccc85f0e19b25efb21427b",
+      "padre": "158b75324606c1c60db4aeb09bee8656bb11f676"
+    }
+  },
+  "validacionNuevaSobreHistorialConsolidado": {
+    "xunitAprobadas": 214,
+    "xunitFallidas": 0,
+    "xunitOmitidas": 0,
+    "integralesAprobadas": 248,
+    "integralesHTTP": 173,
+    "rutasMetodos": 38,
+    "coreAprobadas": 87,
+    "coreHTTP": 62,
+    "migraciones": 7,
+    "ciclosPersistencia": 5,
+    "seisFrentes": true,
+    "REDenPadres": true,
+    "GREENenCorreccionesExactas": true,
+    "GREENenCandidato": true,
+    "H01SQL_RED_GREEN": true,
+    "equivalenciaFuncionalConBd81a59": true
+  },
+  "publicado": false,
+  "etiquetaMovida": false
+}
