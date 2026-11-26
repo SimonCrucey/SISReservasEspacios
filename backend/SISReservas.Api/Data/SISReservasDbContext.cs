@@ -3,7 +3,7 @@ using SISReservas.Api.Models;
 
 namespace SISReservas.Api.Data;
 
-public class SISReservasDbContext : DbContext
+public partial class SISReservasDbContext : DbContext
 {
     public SISReservasDbContext(DbContextOptions<SISReservasDbContext> options)
         : base(options)
@@ -16,14 +16,15 @@ public class SISReservasDbContext : DbContext
     public DbSet<Sesion> Sesiones => Set<Sesion>();
     public DbSet<SolicitudPermiso> SolicitudesPermiso => Set<SolicitudPermiso>();
     public DbSet<UsuarioPermiso> PermisosUsuario => Set<UsuarioPermiso>();
-    public DbSet<Espacio> Espacios => Set<Espacio>();
-    public DbSet<Reserva> Reservas => Set<Reserva>();
     public DbSet<Documento> Documentos => Set<Documento>();
     public DbSet<Notificacion> Notificaciones => Set<Notificacion>();
+
+    partial void ConfigurarReservas(ModelBuilder modelBuilder);
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
+        ConfigurarReservas(modelBuilder);
         modelBuilder.Entity<Usuario>().Property(u => u.CorreoNotificacionesHabilitado).HasDefaultValue(true);
         modelBuilder.Entity<Notificacion>(entity =>
         {
@@ -42,46 +43,6 @@ public class SISReservasDbContext : DbContext
             entity.HasIndex(d => new { d.UsuarioId, d.EliminadoEn });
             entity.HasOne<Usuario>().WithMany().HasForeignKey(d => d.UsuarioId)
                 .OnDelete(DeleteBehavior.Restrict);
-        });
-
-        modelBuilder.Entity<Espacio>(entity =>
-        {
-            entity.HasKey(e => e.Id);
-            entity.Property(e => e.Nombre).HasMaxLength(150).IsRequired();
-            entity.Property(e => e.Tipo).HasConversion<string>().HasMaxLength(30).IsRequired();
-
-            entity.ToTable("Espacios", table =>
-            {
-                table.HasCheckConstraint("CK_Espacios_Nombre", "LEN(LTRIM(RTRIM([Nombre]))) > 0");
-                table.HasCheckConstraint("CK_Espacios_Tipo", "[Tipo] IN ('Salon', 'Cancha', 'Equipo')");
-            });
-        });
-
-        modelBuilder.Entity<Reserva>(entity =>
-        {
-            entity.HasKey(r => r.Id);
-            entity.Property(r => r.Estado).HasConversion<string>().HasMaxLength(30).IsRequired();
-
-            entity.HasOne(r => r.Usuario)
-                .WithMany(u => u.Reservas)
-                .HasForeignKey(r => r.UsuarioId)
-                .OnDelete(DeleteBehavior.Restrict);
-
-            entity.HasOne(r => r.Espacio)
-                .WithMany(e => e.Reservas)
-                .HasForeignKey(r => r.EspacioId)
-                .OnDelete(DeleteBehavior.Restrict);
-
-            entity.HasIndex(r => new { r.EspacioId, r.Estado, r.FechaInicio, r.FechaFin });
-            entity.HasIndex(r => r.Estado);
-            entity.HasIndex(r => r.FechaInicio);
-            entity.HasIndex(r => r.FechaFin);
-
-            entity.ToTable("Reservas", table =>
-            {
-                table.HasCheckConstraint("CK_Reservas_Fechas", "[FechaFin] > [FechaInicio]");
-                table.HasCheckConstraint("CK_Reservas_Estado", "[Estado] IN ('Pendiente', 'Confirmada', 'Cancelada', 'Completada')");
-            });
         });
 
         modelBuilder.Entity<Usuario>(entity =>

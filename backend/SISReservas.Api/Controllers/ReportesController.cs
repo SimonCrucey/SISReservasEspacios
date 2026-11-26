@@ -8,17 +8,17 @@ namespace SISReservas.Api.Controllers;
 [ApiController]
 [Route("api/reportes")]
 [Authorize(AuthenticationSchemes = "Session", Roles = "Administrador,Estandar")]
-public class ReportesController(ReporteService servicio) : ControllerBase
+public partial class ReportesController : ControllerBase
 {
+    private readonly ReporteService servicio;
+
+    public ReportesController(ReporteService servicio) => this.servicio = servicio;
+
     private Guid Usuario => Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
 
     [HttpGet("solicitudes")]
     public Task<IActionResult> Solicitudes([FromQuery] DateTime inicio, [FromQuery] DateTime fin) =>
         Ejecutar(async () => Ok(await servicio.SolicitudesAsync(Usuario, inicio, fin)));
-
-    [HttpGet("reservas")]
-    public Task<IActionResult> Reservas([FromQuery] DateTime inicio, [FromQuery] DateTime fin) =>
-        Ejecutar(async () => Ok(await servicio.ReservasAsync(Usuario, inicio, fin)));
 
     private async Task<IActionResult> Ejecutar(Func<Task<IActionResult>> accion)
     {

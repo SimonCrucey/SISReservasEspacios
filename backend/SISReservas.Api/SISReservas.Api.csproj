@@ -24,4 +24,11 @@
     <Folder Include="Authorization\" />
   </ItemGroup>
 
+  <!-- CoreOnly retira negocio del compilador; mantiene Program y migraciones reales. -->
+  <PropertyGroup Condition="'$(Configuration)' == 'CoreOnly'">
+    <DefineConstants>$(DefineConstants);CORE_ONLY</DefineConstants>
+  </PropertyGroup>
+  <ItemGroup Condition="'$(Configuration)' == 'CoreOnly'">
+    <Compile Remove="Controllers/ReservasController.cs;Controllers/Reservas/**/*.cs;Services/Reservas/**/*.cs;DTOs/Reservas/**/*.cs;Data/Reservas/**/*.cs;Models/Reservas/**/*.cs;Hosting/Reservas/**/*.cs;Models/Reserva.cs;Models/Espacio.cs;Models/Enums/EstadoReserva.cs;Models/Enums/TipoEspacio.cs;Models/Enums/TransaccionesReserva.cs" />
+  </ItemGroup>
 </Project>

@@ -54,18 +54,10 @@ builder.Services.AddScoped<PasswordPolicyService>();
 builder.Services.AddScoped<PermisoService>();
 builder.Services.AddScoped<SolicitudPermisoService>();
 builder.Services.AddSingleton(TimeProvider.System);
-builder.Services.AddScoped<ReservaService>();
 builder.Services.AddScoped<DocumentoService>();
 builder.Services.AddScoped<NotificacionService>();
 builder.Services.AddScoped<ReporteService>();
-builder.Services.AddSingleton(new ClimaOptions(
-    Environment.GetEnvironmentVariable("WEATHER_API_KEY") ?? "",
-    Environment.GetEnvironmentVariable("WEATHER_LOCATION") ?? "18.4861,-69.9312"));
-builder.Services.AddHttpClient<PlanificacionService>(client =>
-{
-    client.BaseAddress = new Uri("https://api.weatherapi.com/v1/");
-    client.Timeout = TimeSpan.FromSeconds(10);
-}).RemoveAllLoggers();
+SISReservas.Api.Hosting.BusinessModule.Register(builder.Services);
 
 var app = builder.Build();
 
@@ -75,7 +67,7 @@ if (app.Configuration.GetValue<bool>("Database:ApplyMigrations"))
     var database = scope.ServiceProvider.GetRequiredService<SISReservasDbContext>();
     var cancellationToken = app.Lifetime.ApplicationStopping;
 
-    await DatabaseStartup.MigrateAsync(database, app.Logger, cancellationToken,
+    await CoreSchemaMigration.MigrateAsync(database, app.Logger, cancellationToken,
         app.Configuration.GetValue("Database:StartupTimeoutSeconds", 120));
 }
 
@@ -98,13 +90,7 @@ if (adminArgument >= 0)
     if (await db.Usuarios.AnyAsync(u => u.Rol == SISReservas.Api.Models.Enums.Rol.Administrador))
         throw new InvalidOperationException("Ya existe un Administrador. Usa la administración de usuarios.");
     usuario.Rol = SISReservas.Api.Models.Enums.Rol.Administrador;
-    if (!await db.Espacios.AnyAsync())
-    {
-        db.Espacios.Add(new SISReservas.Api.Models.Espacio
-        {
-            Nombre = "Cancha de evaluación", Tipo = SISReservas.Api.Models.Enums.TipoEspacio.Cancha, Activo = true
-        });
-    }
+    await SISReservas.Api.Hosting.BusinessModule.InitializeAsync(db);
     await scope.ServiceProvider.GetRequiredService<SessionService>().RevokeAllForUserAsync(usuario.Id);
     await db.SaveChangesAsync();
     await transaction.CommitAsync();

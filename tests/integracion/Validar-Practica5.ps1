@@ -1,4 +1,4 @@
-﻿param([switch]$Local, [string]$MailpitPath, [int]$Puerto = 15094, [int]$PuertoCorreo = 18094, [int]$PuertoSmtp = 11094, [switch]$ProbarWeatherReal, [string]$SubredDocker, [switch]$SoloFunciones)
+﻿param([switch]$Local, [string]$MailpitPath, [int]$Puerto = 15094, [int]$PuertoCorreo = 18094, [int]$PuertoSmtp = 11094, [switch]$ProbarWeatherReal, [string]$SubredDocker, [switch]$CoreOnly, [switch]$SoloFunciones)
 $ErrorActionPreference = 'Stop'
 Add-Type -AssemblyName System.Net.Http
 $handler = [Net.Http.HttpClientHandler]::new()
@@ -314,6 +314,7 @@ try {
             if($SubredDocker -notmatch '^\d{1,3}(\.\d{1,3}){3}/\d{1,2}$'){throw 'SubredDocker debe ser CIDR IPv4.'}
             $config += "`nnetworks:`n  default:`n    ipam:`n      config:`n        - subnet: $SubredDocker`n"
         }
+        if($CoreOnly){$config=$config.Replace('      dockerfile: backend/SISReservas.Api/Dockerfile', "      dockerfile: backend/SISReservas.Api/Dockerfile`n      args:`n        BUILD_CONFIGURATION: CoreOnly")}
         [IO.File]::WriteAllText($composeTemporal, $config)
         EnvLocal 'APP_PORT' "$Puerto"
         EnvLocal 'SMTP_HOST' 'mailpit'
@@ -374,6 +375,46 @@ try {
     $o=(Api POST '/api/auth/login' 200 @{email=$cuentas.dos.Email;password=$clave}).sessionToken
     $null=Api GET '/api/permission-requests/pending' 403 $null $u
     $null=Api GET '/api/permission-requests/pending' 200 $null $a
+    if($CoreOnly){
+        Check 'H-03 Swagger conserva Core y no publica Reservas' (!$swagger.paths.'/api/reservas' -and !$swagger.paths.'/api/reportes/reservas' -and [bool]$swagger.paths.'/api/reportes/solicitudes' -and [bool]$swagger.paths.'/api/documentos')
+        $sol=Api POST '/api/permission-requests' 201 @{permiso=3} $u
+        $null=Api POST "/api/permission-requests/$($sol.id)/approve" 200 $null $a
+        $null=Api POST "/api/permission-requests/$($sol.id)/approve" 409 $null $a
+        $otra=Api POST '/api/permission-requests' 201 @{permiso=3} $o
+        $null=Api POST "/api/permission-requests/$($otra.id)/reject" 200 @{motivoRechazo='Prueba CoreOnly'} $a
+        $null=Api POST "/api/permission-requests/$($otra.id)/approve" 409 $null $a
+        $bandeja=Api GET '/api/notificaciones' 200 $null $u
+        Check 'H-03 Core ejecuta notificaciones reales de permisos' ($bandeja.notificaciones.Count -ge 1)
+        $idNotificacion=$bandeja.notificaciones[0].id
+        $null=Api PATCH "/api/notificaciones/$idNotificacion/leida" 404 $null $o
+        $null=Api PATCH "/api/notificaciones/$idNotificacion/leida" 204 $null $u
+        $null=Api PUT '/api/notificaciones/preferencias' 200 @{correoHabilitado=$false} $u
+        $rangoCore='?inicio='+[uri]::EscapeDataString([DateTime]::UtcNow.AddDays(-1).ToString('o'))+'&fin='+[uri]::EscapeDataString([DateTime]::UtcNow.AddDays(1).ToString('o'))
+        $reporte=Api GET "/api/reportes/solicitudes$rangoCore" 200 $null $u
+        Check 'H-03 Core ejecuta reporte SQL propio' ($reporte.total -eq 1)
+        $null=Api GET '/api/reportes/solicitudes?inicio=2026-01-01T00:00:00Z&fin=2026-01-01T00:00:00Z' 400 $null $u
+        ProbarFalloReporte $u "/api/reportes/solicitudes$rangoCore" 'SolicitudesPermiso'
+        $archivo=Join-Path $evidencia 'documento-core.txt';[IO.File]::WriteAllText($archivo,'Persistencia CoreOnly')
+        $doc=Api POST '/api/documentos' 201 $null $u @{archivo=Get-Item $archivo}
+        $contenido=Api GET "/api/documentos/$($doc.id)/descargar" 200 $null $u
+        $null=Api GET "/api/documentos/$($doc.id)/descargar" 404 $null $o
+        $antes=@((Buzon '/api/v1/messages').messages.ID)
+        $null=Api POST '/api/passwords/recovery' 200 @{email=$cuentas.uno.Email}
+        $msg=Mensaje $cuentas.uno.Email $antes
+        $codigo=[regex]::Match($msg.Text,'Código de recuperación: (\S+)').Groups[1].Value
+        Check 'H-03 Core recibe recuperación SMTP con correo opcional desactivado' (![string]::IsNullOrEmpty($codigo))
+        $null=Api POST '/api/passwords/reset' 200 @{token=$codigo;nuevaPassword=$nueva}
+        $null=Api POST '/api/passwords/reset' 400 @{token=$codigo;nuevaPassword=$nueva}
+        $null=Api GET '/api/auth/me' 401 $null $u
+        $u=(Api POST '/api/auth/login' 200 @{email=$cuentas.uno.Email;password=$nueva}).sessionToken
+        Check 'H-03 Core conserva siete migraciones históricas' ((SqlLectura 'SELECT COUNT(*) FROM __EFMigrationsHistory;') -match '^7$')
+        $null=Compose @('down');$null=Compose @('up','-d');EsperarApi
+        Check 'H-03 Core documento persiste idéntico tras down up' ((Api GET "/api/documentos/$($doc.id)/descargar" 200 $null $u) -ceq $contenido)
+        Check 'H-03 Core preferencias persisten' (!(Api GET '/api/notificaciones/preferencias' 200 $null $u).correoHabilitado)
+        Check 'H-03 Core reporte persiste' ((Api GET "/api/reportes/solicitudes$rangoCore" 200 $null $u).total -eq 1)
+        Write-Host "CoreOnly real validado. Evidencia: $evidencia"
+        return
+    }
     $espacios=Api GET '/api/reservas/espacios' 200 $null $u
     $espacio=$espacios[0].id
     $inicio=[datetime]::UtcNow.Date.AddDays(1).AddHours(12);$fin=$inicio.AddHours(1)
