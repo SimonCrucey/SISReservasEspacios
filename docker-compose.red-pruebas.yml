@@ -1,0 +1,6 @@
+# Overlay opcional: elegir una subred libre; nunca se aplica por defecto.
+networks:
+  default:
+    ipam:
+      config:
+        - subnet: '${DOCKER_TEST_SUBNET:?Define una subred libre para este proyecto aislado}'

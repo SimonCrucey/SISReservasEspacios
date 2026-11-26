@@ -8,6 +8,8 @@ namespace SISReservas.Api.Services;
 
 public class NotificacionService(SISReservasDbContext db)
 {
+    private static readonly SemaphoreSlim LecturaNoRelacional = new(1, 1);
+
     public async Task PrepararAsync(IEnumerable<Guid> destinatarios, string asunto, string mensaje)
     {
         var ids = destinatarios.Distinct().ToArray();
@@ -59,14 +61,31 @@ public class NotificacionService(SISReservasDbContext db)
     public async Task<bool> LeerAsync(Guid usuario, Guid id)
     {
         await ExigirUsuarioAsync(usuario);
-        var notificacion = await db.Notificaciones.FirstOrDefaultAsync(n => n.Id == id && n.UsuarioId == usuario);
-        if (notificacion is null) return false;
-        if (notificacion.LeidaEn is null)
+        var propias = db.Notificaciones.Where(n => n.Id == id && n.UsuarioId == usuario);
+        if (db.Database.IsRelational())
         {
-            notificacion.LeidaEn = DateTime.UtcNow;
-            await db.SaveChangesAsync();
+            // Compare-and-set en SQL: solo quien encuentra LeidaEn NULL escribe la fecha.
+            var fecha = DateTime.UtcNow;
+            var modificadas = await propias.Where(n => n.LeidaEn == null)
+                .ExecuteUpdateAsync(s => s.SetProperty(n => n.LeidaEn, (DateTime?)fecha));
+            return modificadas > 0 || await propias.AnyAsync();
         }
-        return true;
+
+        // InMemory carece de UPDATE condicional; conserva la misma semántica en las pruebas.
+        await LecturaNoRelacional.WaitAsync();
+        try
+        {
+            var notificacion = await propias.FirstOrDefaultAsync();
+            if (notificacion is null) return false;
+            await db.Entry(notificacion).ReloadAsync();
+            if (notificacion.LeidaEn is null)
+            {
+                notificacion.LeidaEn = DateTime.UtcNow;
+                await db.SaveChangesAsync();
+            }
+            return true;
+        }
+        finally { LecturaNoRelacional.Release(); }
     }
 
     public async Task<PreferenciasDto> PreferenciasAsync(Guid usuario, bool? correo = null)

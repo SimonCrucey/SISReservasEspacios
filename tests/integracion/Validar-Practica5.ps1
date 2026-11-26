@@ -1,4 +1,4 @@
-﻿param([switch]$Local, [string]$MailpitPath, [int]$Puerto = 15094, [int]$PuertoCorreo = 18094, [int]$PuertoSmtp = 11094, [switch]$ProbarWeatherReal)
+﻿param([switch]$Local, [string]$MailpitPath, [int]$Puerto = 15094, [int]$PuertoCorreo = 18094, [int]$PuertoSmtp = 11094, [switch]$ProbarWeatherReal, [string]$SubredDocker, [switch]$SoloFunciones)
 $ErrorActionPreference = 'Stop'
 Add-Type -AssemblyName System.Net.Http
 $handler = [Net.Http.HttpClientHandler]::new()
@@ -217,6 +217,7 @@ function SqlLectura($consulta) {
     }
     return ($r -join '').Trim()
 }
+if($SoloFunciones){return}
 try {
     if(!$Local){
         $dockerRuta=ResolverEjecutable 'docker'
@@ -264,6 +265,10 @@ try {
         $composeTemporal = Join-Path $evidencia 'docker-compose.yml'
         $config = [IO.File]::ReadAllText($composeTemporal)
         $config = $config.Replace('    profiles: [inspeccion-correo]', "    entrypoint: ['sleep']`n    command: ['86400']")
+        if($SubredDocker){
+            if($SubredDocker -notmatch '^\d{1,3}(\.\d{1,3}){3}/\d{1,2}$'){throw 'SubredDocker debe ser CIDR IPv4.'}
+            $config += "`nnetworks:`n  default:`n    ipam:`n      config:`n        - subnet: $SubredDocker`n"
+        }
         [IO.File]::WriteAllText($composeTemporal, $config)
         EnvLocal 'APP_PORT' "$Puerto"
         EnvLocal 'SMTP_HOST' 'mailpit'
