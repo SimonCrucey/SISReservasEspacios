@@ -112,6 +112,8 @@ if (adminArgument >= 0)
     return;
 }
 
+app.UseMiddleware<SISReservas.Api.Infrastructure.ControlledErrorMiddleware>();
+
 if (app.Environment.IsDevelopment())
 {
     app.UseSwagger();

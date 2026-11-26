@@ -217,6 +217,51 @@ function SqlLectura($consulta) {
     }
     return ($r -join '').Trim()
 }
+function ProbarFalloReporte([string]$token,[string]$ruta,[string]$tabla){
+    if($Local){throw 'Esta comprobación requiere SQL Server Docker aislado.'}
+    if($tabla -notin @('Reservas','SolicitudesPermiso')){throw 'Tabla no autorizada.'}
+    $objeto=SqlLectura "SELECT OBJECT_ID(N'dbo.$tabla');"
+    $bloqueo="SET XACT_ABORT ON; BEGIN TRAN; ALTER TABLE dbo.$tabla ADD [A3BloqueoTemporal] int NULL; WAITFOR DELAY '00:00:40'; ROLLBACK;"
+    $argumentos=@('compose','-p',$proyecto,'--env-file',"$evidencia/.env",'-f',"$evidencia/docker-compose.yml",'exec','-T','sqlserver','sh','-c','SQLCMDPASSWORD="$MSSQL_SA_PASSWORD" /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -C -b -d SISReservasEspacios -Q "$1"','sh',$bloqueo)
+    $archivoFunciones=Join-Path $raiz 'tests/integracion/Validar-Practica5.ps1'
+    $trabajo=Start-Job -ScriptBlock {
+        param($archivo,$argv,$destino)
+        . $archivo -SoloFunciones
+        $evidencia=$destino
+        try {EjecutarProceso 'docker' $argv '' 'bloqueo-h02' -DevolverResultado}
+        finally {$http.Dispose()}
+    } -ArgumentList $archivoFunciones,$argumentos,$evidencia
+    try {
+        $reloj=[Diagnostics.Stopwatch]::StartNew()
+        do {
+            $ocupado=SqlLectura "SELECT COUNT(*) FROM sys.dm_tran_locks WHERE resource_database_id=DB_ID() AND resource_type='OBJECT' AND resource_associated_entity_id=$objeto AND request_mode='Sch-M' AND request_status='GRANT';"
+            if($ocupado -match '^1$'){break}
+            if($trabajo.State -eq 'Failed' -or $reloj.Elapsed.TotalSeconds -gt 20){throw 'No se confirmó el bloqueo SQL de auditoría.'}
+            Start-Sleep -Milliseconds 200
+        }while($true)
+        $peticion=[Net.Http.HttpRequestMessage]::new([Net.Http.HttpMethod]::Get,"http://localhost:$Puerto$ruta")
+        $peticion.Headers.Authorization=[Net.Http.Headers.AuthenticationHeaderValue]::new('Bearer',$token)
+        $peticion.Headers.Add('X-Dato-Sensible','marcador-sintetico-H02')
+        $respuesta=$null
+        try {
+            # El timeout SQL es 30s; el cliente debe esperar para observar la respuesta real.
+            $cliente=[Net.Http.HttpClient]::new($handler,$false);$cliente.Timeout=[TimeSpan]::FromSeconds(60)
+            try {$respuesta=$cliente.SendAsync($peticion).GetAwaiter().GetResult();$texto=$respuesta.Content.ReadAsStringAsync().GetAwaiter().GetResult()}
+            finally {$cliente.Dispose()}
+            Check 'H-02 pipeline real devuelve 503 ante timeout SQL' ([int]$respuesta.StatusCode -eq 503)
+            Check 'H-02 respuesta omite datos sensibles y detalles internos' ($texto -notmatch 'SqlException|/src/|SELECT|Authorization|marcador-sintetico-H02' -and !$texto.Contains($token) -and $texto -match 'message')
+        }finally{if($respuesta){$respuesta.Dispose()};$peticion.Dispose()}
+        $null=$trabajo | Wait-Job -Timeout 60
+        $resultado=$trabajo | Receive-Job -ErrorAction Stop
+        Check 'H-02 bloqueo SQL revertido correctamente' ($trabajo.State -eq 'Completed' -and $resultado.Codigo -eq 0 -and (SqlLectura "SELECT CASE WHEN COL_LENGTH('dbo.$tabla','A3BloqueoTemporal') IS NULL THEN 1 ELSE 0 END;") -match '^1$')
+        $null=Api GET $ruta 200 $null $token
+        Check 'H-02 reporte funciona tras recuperarse de persistencia' $true
+    }finally{
+        if($trabajo.State -eq 'Running'){$null=$trabajo | Wait-Job -Timeout 60}
+        if($trabajo.State -eq 'Running'){Stop-Job $trabajo}
+        Remove-Job $trabajo
+    }
+}
 if($SoloFunciones){return}
 try {
     if(!$Local){
@@ -503,6 +548,8 @@ try {
     Check 'Rango vacio permisos' ((Api GET "/api/reportes/solicitudes$vacio" 200 $null $u).total -eq 0)
     $null=Api GET '/api/reportes/solicitudes?inicio=2026-01-01&fin=2026-01-01' 400 $null $u
     $null=Api GET '/api/reportes/reservas?inicio=2026-01-01&fin=2026-01-01' 400 $null $u
+
+    if(!$Local){ProbarFalloReporte $u ("/api/reportes/reservas$rango") 'Reservas'}
 
     if(!$Local){
         # Pausar solo el despachador del proyecto aislado para controlar los intentos.
