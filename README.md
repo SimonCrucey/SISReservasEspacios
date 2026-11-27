@@ -4,7 +4,7 @@ Sistema académico de reservas de salones, canchas y equipos de **Programación 
 
 El objetivo es ejecutar y evaluar el backend con Docker Compose, sin instalar .NET ni SQL Server en el host. Swagger es la interfaz de evaluación; no se requiere frontend.
 
-**Versión de esta guía.** Entrega consolidada de Asignación 3 en `entrega-asignacion-3`, basada en la Práctica 5 publicada. Tiene un commit por hallazgo y un cuarto de documentación. La sesión histórica y sus evidencias permanecen identificadas como tales. La etiqueta local `asignacion-3` todavía conserva `e8c18c4`: no se ha movido ni publicado. En la revisión local usar la rama de entrega; la selección de la etiqueta desde GitHub solo corresponde después de autorizar su actualización/publicación.
+**Versión de esta guía.** Entrega consolidada de Asignación 3 en `entrega-asignacion-3`, basada en la Práctica 5 publicada. Conserva un commit por hallazgo y commits documentales posteriores. La sesión histórica y sus evidencias permanecen identificadas como tales. La etiqueta local `asignacion-3` todavía conserva `e8c18c4`: no se ha movido ni publicado. En la revisión local usar la rama de entrega; la selección de la etiqueta desde GitHub solo corresponde después de autorizar su actualización/publicación.
 
 ## Funcionalidades principales
 
@@ -59,18 +59,14 @@ git clone https://github.com/SimonCrucey/SISReservasEspacios.git
 cd SISReservasEspacios
 ```
 
-Antes de evaluar, selecciona la referencia que contenga la versión aprobada. **Solo después de que se publique la etiqueta corregida**, podrá seleccionarse así:
+**Procedimiento oficial del profesor:** después de publicarse la etiqueta definitiva de Asignación 3, selecciona la versión evaluable desde el clon de GitHub:
 
 ```powershell
-# Revisión previa: ejecutar desde un clon LOCAL del repositorio, sin depender de GitHub.
-# La rama entrega-asignacion-3 aún no se ha publicado.
-git checkout entrega-asignacion-3
-# Tras autorizar publicación de la entrega evaluable, seleccionar en su lugar:
-# git checkout asignacion-3
+git checkout asignacion-3
 git rev-parse HEAD
 ```
 
-Compara el hash con el comunicado para la entrega. Durante esta preparación local, conserva `fix/practica5-auditoria-final`; no cambies a la etiqueta anterior esperando encontrar las correcciones.
+Compara el hash con el comunicado para la entrega. No es necesario publicar ni seleccionar una rama de trabajo. Antes de autorizar la actualización y publicación, la etiqueta local antigua no representa este candidato; para esa revisión previa utiliza exclusivamente el procedimiento «Clon local limpio antes de publicar» al final de esta guía, sobre `entrega-asignacion-3`.
 
 En un clon nuevo de la versión correcta:
 
@@ -642,7 +638,7 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\tests\integracion\Veri
 
 Requiere Git, Windows PowerShell 5.1 o posterior y SDK 10/NuGet. Exporta copias temporales, incorpora solo la prueba nueva, exige fallo anterior y aprobación actual; no cambia ramas, etiquetas ni bases. Los tres commits de corrección citan su hallazgo. La [bitácora](docs/bitacora-asignacion-3.md) registra qué se pidió, qué falló, por qué pasó y las mejoras visibles en AGENTS y criterios.
 
-La publicación de Asignación 3 sigue pendiente. El `git checkout asignacion-3` del inicio rápido corresponde a esa entrega y solo funcionará desde un clon remoto después de autorizar su publicación; en la preparación local usar el worktree `trabajo-asignacion-3`. No se requiere mover ninguna etiqueta anterior.
+La publicación de Asignación 3 sigue pendiente. El `git checkout asignacion-3` del inicio rápido es el procedimiento oficial desde GitHub después de publicar la etiqueta definitiva. Para la preparación previa local, usar `entrega-asignacion-3` mediante «Clon local limpio antes de publicar». La rama histórica `trabajo-asignacion-3` se conserva como respaldo de la sesión y no es la versión que debe evaluar el profesor. No se requiere mover ninguna etiqueta anterior.
 
 ## Revisión personal de Asignación 3: comprobación definitiva
 
